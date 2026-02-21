@@ -13,13 +13,14 @@ export interface ComboboxOption {
   sublabel?: string;
 }
 
-interface SearchableSelectProps {
+export interface SearchableSelectProps {
   options: ComboboxOption[];
   value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   className?: string;
+  label?: string;
 }
 
 export function SearchableSelect({

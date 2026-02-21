@@ -117,6 +117,231 @@ export type Database = {
         }
         Relationships: []
       }
+      phenologie: {
+        Row: {
+          alerte_chute_physio_intense: boolean | null
+          alerte_cycle_anormal: boolean | null
+          alerte_floraison_tardive: boolean | null
+          campagne_id: number
+          conditions_meteo_generales: string | null
+          created_at: string | null
+          date_observation: string
+          domaine_id: number
+          duree_chute_physio_jours: number | null
+          duree_floraison_jours: number | null
+          duree_totale_cycle_jours: number | null
+          id: number
+          notification_rappel_envoyee: boolean | null
+          observateur_nom: string
+          prochaine_observation_prevue: string | null
+          stade_boutons_floraux_date_debut: string | null
+          stade_boutons_floraux_observations: string | null
+          stade_chute_petales_date_debut: string | null
+          stade_chute_petales_observations: string | null
+          stade_chute_physio_date_debut: string | null
+          stade_chute_physio_date_fin: string | null
+          stade_chute_physio_intensite: string | null
+          stade_chute_physio_observations: string | null
+          stade_chute_physio_taux_pct: number | null
+          stade_debourrement_date_debut: string | null
+          stade_debourrement_observations: string | null
+          stade_debut_maturite_date: string | null
+          stade_debut_maturite_observations: string | null
+          stade_floraison_date_debut: string | null
+          stade_floraison_date_fin: string | null
+          stade_floraison_intensite: string | null
+          stade_floraison_nb_fleurs_estime: number | null
+          stade_floraison_observations: string | null
+          stade_floraison_pct_arbres: number | null
+          stade_grossissement_date_debut: string | null
+          stade_grossissement_observations: string | null
+          stade_maturite_recolte_date: string | null
+          stade_maturite_recolte_observations: string | null
+          stade_nouaison_date_debut: string | null
+          stade_nouaison_observations: string | null
+          stade_nouaison_taux_pct: number | null
+          stade_prefloraison_date_debut: string | null
+          stade_prefloraison_observations: string | null
+          stade_repos_date_debut: string | null
+          stade_repos_observations: string | null
+          stade_veraison_date_debut: string | null
+          stade_veraison_observations: string | null
+          stade_veraison_pct_fruits_colores: number | null
+          temperature_moyenne_periode: number | null
+          updated_at: string | null
+          user_id: string
+          variete_id: number
+        }
+        Insert: {
+          alerte_chute_physio_intense?: boolean | null
+          alerte_cycle_anormal?: boolean | null
+          alerte_floraison_tardive?: boolean | null
+          campagne_id: number
+          conditions_meteo_generales?: string | null
+          created_at?: string | null
+          date_observation: string
+          domaine_id: number
+          duree_chute_physio_jours?: number | null
+          duree_floraison_jours?: number | null
+          duree_totale_cycle_jours?: number | null
+          id?: number
+          notification_rappel_envoyee?: boolean | null
+          observateur_nom: string
+          prochaine_observation_prevue?: string | null
+          stade_boutons_floraux_date_debut?: string | null
+          stade_boutons_floraux_observations?: string | null
+          stade_chute_petales_date_debut?: string | null
+          stade_chute_petales_observations?: string | null
+          stade_chute_physio_date_debut?: string | null
+          stade_chute_physio_date_fin?: string | null
+          stade_chute_physio_intensite?: string | null
+          stade_chute_physio_observations?: string | null
+          stade_chute_physio_taux_pct?: number | null
+          stade_debourrement_date_debut?: string | null
+          stade_debourrement_observations?: string | null
+          stade_debut_maturite_date?: string | null
+          stade_debut_maturite_observations?: string | null
+          stade_floraison_date_debut?: string | null
+          stade_floraison_date_fin?: string | null
+          stade_floraison_intensite?: string | null
+          stade_floraison_nb_fleurs_estime?: number | null
+          stade_floraison_observations?: string | null
+          stade_floraison_pct_arbres?: number | null
+          stade_grossissement_date_debut?: string | null
+          stade_grossissement_observations?: string | null
+          stade_maturite_recolte_date?: string | null
+          stade_maturite_recolte_observations?: string | null
+          stade_nouaison_date_debut?: string | null
+          stade_nouaison_observations?: string | null
+          stade_nouaison_taux_pct?: number | null
+          stade_prefloraison_date_debut?: string | null
+          stade_prefloraison_observations?: string | null
+          stade_repos_date_debut?: string | null
+          stade_repos_observations?: string | null
+          stade_veraison_date_debut?: string | null
+          stade_veraison_observations?: string | null
+          stade_veraison_pct_fruits_colores?: number | null
+          temperature_moyenne_periode?: number | null
+          updated_at?: string | null
+          user_id: string
+          variete_id: number
+        }
+        Update: {
+          alerte_chute_physio_intense?: boolean | null
+          alerte_cycle_anormal?: boolean | null
+          alerte_floraison_tardive?: boolean | null
+          campagne_id?: number
+          conditions_meteo_generales?: string | null
+          created_at?: string | null
+          date_observation?: string
+          domaine_id?: number
+          duree_chute_physio_jours?: number | null
+          duree_floraison_jours?: number | null
+          duree_totale_cycle_jours?: number | null
+          id?: number
+          notification_rappel_envoyee?: boolean | null
+          observateur_nom?: string
+          prochaine_observation_prevue?: string | null
+          stade_boutons_floraux_date_debut?: string | null
+          stade_boutons_floraux_observations?: string | null
+          stade_chute_petales_date_debut?: string | null
+          stade_chute_petales_observations?: string | null
+          stade_chute_physio_date_debut?: string | null
+          stade_chute_physio_date_fin?: string | null
+          stade_chute_physio_intensite?: string | null
+          stade_chute_physio_observations?: string | null
+          stade_chute_physio_taux_pct?: number | null
+          stade_debourrement_date_debut?: string | null
+          stade_debourrement_observations?: string | null
+          stade_debut_maturite_date?: string | null
+          stade_debut_maturite_observations?: string | null
+          stade_floraison_date_debut?: string | null
+          stade_floraison_date_fin?: string | null
+          stade_floraison_intensite?: string | null
+          stade_floraison_nb_fleurs_estime?: number | null
+          stade_floraison_observations?: string | null
+          stade_floraison_pct_arbres?: number | null
+          stade_grossissement_date_debut?: string | null
+          stade_grossissement_observations?: string | null
+          stade_maturite_recolte_date?: string | null
+          stade_maturite_recolte_observations?: string | null
+          stade_nouaison_date_debut?: string | null
+          stade_nouaison_observations?: string | null
+          stade_nouaison_taux_pct?: number | null
+          stade_prefloraison_date_debut?: string | null
+          stade_prefloraison_observations?: string | null
+          stade_repos_date_debut?: string | null
+          stade_repos_observations?: string | null
+          stade_veraison_date_debut?: string | null
+          stade_veraison_observations?: string | null
+          stade_veraison_pct_fruits_colores?: number | null
+          temperature_moyenne_periode?: number | null
+          updated_at?: string | null
+          user_id?: string
+          variete_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phenologie_campagne_id_fkey"
+            columns: ["campagne_id"]
+            isOneToOne: false
+            referencedRelation: "campagnes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phenologie_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phenologie_variete_id_fkey"
+            columns: ["variete_id"]
+            isOneToOne: false
+            referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phenologie_observations: {
+        Row: {
+          created_at: string | null
+          date_observation: string
+          id: number
+          notes: string | null
+          observateur_nom: string
+          phenologie_id: number
+          stades_observes: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          date_observation: string
+          id?: number
+          notes?: string | null
+          observateur_nom: string
+          phenologie_id: number
+          stades_observes?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          date_observation?: string
+          id?: number
+          notes?: string | null
+          observateur_nom?: string
+          phenologie_id?: number
+          stades_observes?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phenologie_observations_phenologie_id_fkey"
+            columns: ["phenologie_id"]
+            isOneToOne: false
+            referencedRelation: "phenologie"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       porte_greffes: {
         Row: {
           code_pg: string

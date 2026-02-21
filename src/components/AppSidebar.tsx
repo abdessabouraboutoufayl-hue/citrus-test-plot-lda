@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -27,6 +27,13 @@ export function AppSidebar() {
     { title: "Nouvelle analyse", url: "/qualite/new", icon: PlusCircle },
     { title: "Liste analyses", url: "/qualite", icon: List },
     { title: "Dashboard qualité", url: "/qualite/dashboard", icon: BarChart3 },
+  ];
+
+  const phenologieItems = [
+    { title: "Suivi phénologique", url: "/phenologie/suivi", icon: Flower2 },
+    { title: "Historique", url: "/phenologie/historique", icon: History },
+    { title: "Comparaison campagnes", url: "/phenologie/comparaison", icon: GitCompareArrows },
+    { title: "Dashboard phénologie", url: "/phenologie/dashboard", icon: BarChart3 },
   ];
 
   const adminItems: typeof productionItems = [];
@@ -84,6 +91,23 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {qualiteItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <item.icon className="h-4 w-4" /><span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-sidebar-foreground/50">🌸 Phénologie</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {phenologieItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">

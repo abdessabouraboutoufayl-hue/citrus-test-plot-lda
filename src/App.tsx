@@ -15,6 +15,10 @@ import Administration from "@/pages/Administration";
 import QualiteWizard from "@/pages/QualiteWizard";
 import QualiteList from "@/pages/QualiteList";
 import QualiteDashboard from "@/pages/QualiteDashboard";
+import PhenologieSuivi from "@/pages/PhenologieSuivi";
+import PhenologieHistorique from "@/pages/PhenologieHistorique";
+import PhenologieComparaison from "@/pages/PhenologieComparaison";
+import PhenologieDashboard from "@/pages/PhenologieDashboard";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +46,10 @@ function AppRoutes() {
         <Route path="/qualite" element={<QualiteList />} />
         <Route path="/qualite/new" element={<QualiteWizard />} />
         <Route path="/qualite/dashboard" element={<QualiteDashboard />} />
+        <Route path="/phenologie/suivi" element={<PhenologieSuivi />} />
+        <Route path="/phenologie/historique" element={<PhenologieHistorique />} />
+        <Route path="/phenologie/comparaison" element={<PhenologieComparaison />} />
+        <Route path="/phenologie/dashboard" element={<PhenologieDashboard />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/admin" element={<Administration />} />
         <Route path="/profile" element={<Profile />} />
