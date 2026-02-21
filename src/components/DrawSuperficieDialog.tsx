@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
@@ -36,6 +38,8 @@ export default function DrawSuperficieDialog({
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
   const [currentGeoJSON, setCurrentGeoJSON] = useState<any>(null);
   const [areaHa, setAreaHa] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -161,6 +165,34 @@ export default function DrawSuperficieDialog({
     };
   }, [open, latitude, longitude, existingGeoJSON]);
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim() || !mapRef.current) return;
+    setSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`
+      );
+      const results = await response.json();
+      if (results.length > 0) {
+        const { lat, lon, boundingbox } = results[0];
+        if (boundingbox) {
+          mapRef.current.fitBounds([
+            [parseFloat(boundingbox[0]), parseFloat(boundingbox[2])],
+            [parseFloat(boundingbox[1]), parseFloat(boundingbox[3])],
+          ]);
+        } else {
+          mapRef.current.setView([parseFloat(lat), parseFloat(lon)], 16);
+        }
+      } else {
+        // No results found
+      }
+    } catch (e) {
+      console.error("Search error", e);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleSave = () => {
     if (currentGeoJSON) {
       onSave(currentGeoJSON, Math.round(areaHa * 100) / 100);
@@ -174,6 +206,21 @@ export default function DrawSuperficieDialog({
         <DialogHeader>
           <DialogTitle>Tracer la superficie — {domaineName}</DialogTitle>
         </DialogHeader>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher un lieu (ex: Berkane, Maroc)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="pl-9"
+            />
+          </div>
+          <Button variant="outline" onClick={handleSearch} disabled={searching}>
+            {searching ? "..." : "Rechercher"}
+          </Button>
+        </div>
         <div className="flex-1 relative rounded-lg overflow-hidden border">
           <div ref={mapContainerRef} style={{ height: "100%", width: "100%" }} />
         </div>
