@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -34,6 +34,15 @@ export function AppSidebar() {
     { title: "Historique", url: "/phenologie/historique", icon: History },
     { title: "Comparaison campagnes", url: "/phenologie/comparaison", icon: GitCompareArrows },
     { title: "Dashboard phénologie", url: "/phenologie/dashboard", icon: BarChart3 },
+  ];
+
+  const analyticsItems = [
+    ...(userInfo.role === "direction" || userInfo.role === "responsable_central" ? [{ title: "Vue Exécutive", url: "/analytics/executive", icon: LineChart }] : []),
+    { title: "Dashboard Global", url: "/analytics/global", icon: BarChart3 },
+    { title: "Carte GPS", url: "/analytics/carte-gps", icon: Map },
+    { title: "Analyses Croisées", url: "/analytics/analyses-croisees", icon: GitMerge },
+    { title: "Exports Avancés", url: "/analytics/exports", icon: Download },
+    { title: "Rapports Auto", url: "/analytics/rapports-auto", icon: FileText },
   ];
 
   const adminItems: typeof productionItems = [];
@@ -91,6 +100,23 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {qualiteItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <item.icon className="h-4 w-4" /><span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-sidebar-foreground/50">📈 Analytics</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {analyticsItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">

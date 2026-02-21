@@ -19,6 +19,12 @@ import PhenologieSuivi from "@/pages/PhenologieSuivi";
 import PhenologieHistorique from "@/pages/PhenologieHistorique";
 import PhenologieComparaison from "@/pages/PhenologieComparaison";
 import PhenologieDashboard from "@/pages/PhenologieDashboard";
+import AnalyticsExecutive from "@/pages/AnalyticsExecutive";
+import AnalyticsGlobal from "@/pages/AnalyticsGlobal";
+import AnalyticsCarteGPS from "@/pages/AnalyticsCarteGPS";
+import AnalysesCroisees from "@/pages/AnalysesCroisees";
+import AnalyticsExports from "@/pages/AnalyticsExports";
+import AnalyticsRapportsAuto from "@/pages/AnalyticsRapportsAuto";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +59,12 @@ function AppRoutes() {
         <Route path="/validation" element={<Validation />} />
         <Route path="/admin" element={<Administration />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/analytics/executive" element={<AnalyticsExecutive />} />
+        <Route path="/analytics/global" element={<AnalyticsGlobal />} />
+        <Route path="/analytics/carte-gps" element={<AnalyticsCarteGPS />} />
+        <Route path="/analytics/analyses-croisees" element={<AnalysesCroisees />} />
+        <Route path="/analytics/exports" element={<AnalyticsExports />} />
+        <Route path="/analytics/rapports-auto" element={<AnalyticsRapportsAuto />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
