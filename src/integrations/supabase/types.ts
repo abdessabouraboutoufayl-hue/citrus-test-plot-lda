@@ -100,6 +100,8 @@ export type Database = {
           nom: string
           region: string
           responsable_nom: string | null
+          superficie_geojson: Json | null
+          superficie_ha: number | null
         }
         Insert: {
           code: string
@@ -110,6 +112,8 @@ export type Database = {
           nom: string
           region: string
           responsable_nom?: string | null
+          superficie_geojson?: Json | null
+          superficie_ha?: number | null
         }
         Update: {
           code?: string
@@ -120,6 +124,8 @@ export type Database = {
           nom?: string
           region?: string
           responsable_nom?: string | null
+          superficie_geojson?: Json | null
+          superficie_ha?: number | null
         }
         Relationships: []
       }
