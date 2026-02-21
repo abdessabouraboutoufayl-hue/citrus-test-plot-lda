@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { toast } from "sonner";
-import { Info, Save } from "lucide-react";
+import { Info, Save, Copy } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -64,7 +65,8 @@ export default function PhenologieSuivi() {
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
   const [rowEdits, setRowEdits] = useState<Record<string, RowEdit>>({});
-
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [bulkDate, setBulkDate] = useState(new Date().toISOString().split("T")[0]);
   const isCentral = userInfo.role === "responsable_central";
 
   const { data: campagnes } = useQuery({
@@ -163,6 +165,34 @@ export default function PhenologieSuivi() {
   }, [today]);
 
   const hasChanges = Object.keys(rowEdits).length > 0;
+
+  const toggleRow = useCallback((id: string) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelectedRows((prev) =>
+      prev.size === tableRows.length
+        ? new Set()
+        : new Set(tableRows.map((r) => r.varieteId.toString()))
+    );
+  }, [tableRows]);
+
+  const applyBulkDate = useCallback(() => {
+    if (selectedRows.size === 0) return;
+    setRowEdits((prev) => {
+      const next = { ...prev };
+      selectedRows.forEach((id) => {
+        next[id] = { ...next[id], date: bulkDate };
+      });
+      return next;
+    });
+    toast.success(`Date ${bulkDate} appliquée à ${selectedRows.size} ligne(s)`);
+  }, [selectedRows, bulkDate]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -271,6 +301,24 @@ export default function PhenologieSuivi() {
               </Button>
             )}
           </CardHeader>
+          {/* Bulk date action bar */}
+          {selectedRows.size > 0 && (
+            <div className="px-4 pb-3 flex items-center gap-3 flex-wrap border-b">
+              <span className="text-sm text-muted-foreground">
+                {selectedRows.size} ligne(s) sélectionnée(s)
+              </span>
+              <Input
+                type="date"
+                className="h-9 text-xs w-[160px]"
+                value={bulkDate}
+                onChange={(e) => setBulkDate(e.target.value)}
+              />
+              <Button size="sm" variant="outline" onClick={applyBulkDate}>
+                <Copy className="h-4 w-4 mr-2" />
+                Appliquer la date
+              </Button>
+            </div>
+          )}
           <CardContent className="p-0">
             {tableRows.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
@@ -281,6 +329,12 @@ export default function PhenologieSuivi() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={selectedRows.size === tableRows.length && tableRows.length > 0}
+                          onCheckedChange={toggleAll}
+                        />
+                      </TableHead>
                       <TableHead className="w-[150px]">Domaine</TableHead>
                       <TableHead className="w-[130px]">Type variété</TableHead>
                       <TableHead className="w-[100px]">Code</TableHead>
@@ -291,11 +345,17 @@ export default function PhenologieSuivi() {
                   </TableHeader>
                   <TableBody>
                     {tableRows.map((row) => {
-                      const hasEdit = rowEdits[row.varieteId.toString()] !== undefined;
-                      const stadeChanged = hasEdit && rowEdits[row.varieteId.toString()]?.stade !== undefined
-                        && rowEdits[row.varieteId.toString()]?.stade !== row.currentStade;
+                      const vid = row.varieteId.toString();
+                      const hasEdit = rowEdits[vid] !== undefined;
+                      const isSelected = selectedRows.has(vid);
                       return (
-                        <TableRow key={row.varieteId} className={hasEdit ? "bg-primary/5" : ""}>
+                        <TableRow key={row.varieteId} className={hasEdit ? "bg-primary/5" : isSelected ? "bg-muted/50" : ""}>
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleRow(vid)}
+                            />
+                          </TableCell>
                           <TableCell className="text-sm">{row.domaineNom}</TableCell>
                           <TableCell>
                             <span
@@ -332,7 +392,7 @@ export default function PhenologieSuivi() {
                               type="date"
                               className="h-9 text-xs w-full"
                               value={row.stadeDate}
-                              onChange={(e) => updateRowEdit(row.varieteId.toString(), "date", e.target.value)}
+                              onChange={(e) => updateRowEdit(vid, "date", e.target.value)}
                               disabled={!row.selectedStade}
                             />
                           </TableCell>
@@ -341,7 +401,7 @@ export default function PhenologieSuivi() {
                               className="h-9 text-xs w-full"
                               placeholder="Notes..."
                               value={row.stadeObs}
-                              onChange={(e) => updateRowEdit(row.varieteId.toString(), "obs", e.target.value)}
+                              onChange={(e) => updateRowEdit(vid, "obs", e.target.value)}
                               disabled={!row.selectedStade}
                             />
                           </TableCell>
