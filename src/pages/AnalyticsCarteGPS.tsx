@@ -9,13 +9,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const MOROCCO_CENTER: [number, number] = [33.9, -6.9];
-const DEFAULT_COORDS: Record<string, [number, number]> = {
-  "Ain Chaib": [34.05, -2.15],
-  "Behja": [34.68, -1.91],
-  "Triffa": [34.95, -2.35],
-  "Ouargha": [34.45, -4.30],
-  "Ouled Gnaou": [33.88, -6.35],
-};
 
 export default function AnalyticsCarteGPS() {
   const { userInfo } = useAuth();
@@ -70,8 +63,8 @@ export default function AnalyticsCarteGPS() {
 
   const markers = useMemo(() => {
     return domaines.filter(d => selectedDomaines.includes(d.id)).map(d => {
-      const lat = (d as any).latitude || DEFAULT_COORDS[d.nom]?.[0] || MOROCCO_CENTER[0];
-      const lng = (d as any).longitude || DEFAULT_COORDS[d.nom]?.[1] || MOROCCO_CENTER[1];
+      const lat = d.latitude || MOROCCO_CENTER[0];
+      const lng = d.longitude || MOROCCO_CENTER[1];
       const dProds = productions.filter(p => p.domaine_id === d.id);
       const dQuals = qualites.filter(q => q.domaine_id === d.id);
       const totalProd = dProds.reduce((s, p) => s + (p.poids_total_kg || 0), 0);
