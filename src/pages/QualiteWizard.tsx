@@ -91,9 +91,9 @@ export default function QualiteWizard() {
     queryFn: async () => { const { data } = await supabase.from("domaines").select("*"); return data || []; },
   });
 
-  const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || w.domaine_id));
   const isCentral = userInfo.role === "responsable_central";
   const w = form.watch();
+  const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || w.domaine_id));
   const ratioEA = w.brix_degres && w.acidite_gl && w.acidite_gl !== 0 ? w.brix_degres / w.acidite_gl : null;
   const moyennePepins = w.nb_pepins_echantillon_total != null && w.nb_fruits_echantillon
     ? (w.nb_pepins_echantillon_total / w.nb_fruits_echantillon).toFixed(2) : "-";
