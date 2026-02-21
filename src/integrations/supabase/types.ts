@@ -95,6 +95,8 @@ export type Database = {
           code: string
           created_at: string | null
           id: number
+          latitude: number | null
+          longitude: number | null
           nom: string
           region: string
           responsable_nom: string | null
@@ -103,6 +105,8 @@ export type Database = {
           code: string
           created_at?: string | null
           id?: number
+          latitude?: number | null
+          longitude?: number | null
           nom: string
           region: string
           responsable_nom?: string | null
@@ -111,9 +115,50 @@ export type Database = {
           code?: string
           created_at?: string | null
           id?: number
+          latitude?: number | null
+          longitude?: number | null
           nom?: string
           region?: string
           responsable_nom?: string | null
+        }
+        Relationships: []
+      }
+      exports_historique: {
+        Row: {
+          created_at: string | null
+          fichier_url: string | null
+          filtres_appliques: Json | null
+          id: number
+          nb_lignes: number | null
+          nom_fichier: string
+          taille_fichier_kb: number | null
+          type_donnees: string
+          type_export: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          fichier_url?: string | null
+          filtres_appliques?: Json | null
+          id?: number
+          nb_lignes?: number | null
+          nom_fichier: string
+          taille_fichier_kb?: number | null
+          type_donnees?: string
+          type_export?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          fichier_url?: string | null
+          filtres_appliques?: Json | null
+          id?: number
+          nb_lignes?: number | null
+          nom_fichier?: string
+          taille_fichier_kb?: number | null
+          type_donnees?: string
+          type_export?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -642,6 +687,56 @@ export type Database = {
             columns: ["variete_id"]
             isOneToOne: false
             referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rapports_automatiques: {
+        Row: {
+          actif: boolean | null
+          created_at: string | null
+          dernier_envoi: string | null
+          domaine_id: number | null
+          frequence_cron: string | null
+          id: number
+          nom_rapport: string
+          prochain_envoi: string | null
+          template_rapport: Json | null
+          type_rapport: string
+          user_destinataire: string | null
+        }
+        Insert: {
+          actif?: boolean | null
+          created_at?: string | null
+          dernier_envoi?: string | null
+          domaine_id?: number | null
+          frequence_cron?: string | null
+          id?: number
+          nom_rapport: string
+          prochain_envoi?: string | null
+          template_rapport?: Json | null
+          type_rapport?: string
+          user_destinataire?: string | null
+        }
+        Update: {
+          actif?: boolean | null
+          created_at?: string | null
+          dernier_envoi?: string | null
+          domaine_id?: number | null
+          frequence_cron?: string | null
+          id?: number
+          nom_rapport?: string
+          prochain_envoi?: string | null
+          template_rapport?: Json | null
+          type_rapport?: string
+          user_destinataire?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapports_automatiques_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
             referencedColumns: ["id"]
           },
         ]
