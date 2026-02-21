@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -190,10 +190,13 @@ export default function QualiteWizard() {
                 {isCentral ? (
                   <FormField control={form.control} name="domaine_id" render={({ field }) => (
                     <FormItem><FormLabel>Domaine</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger></FormControl>
-                        <SelectContent>{domaines.map((d) => <SelectItem key={d.id} value={d.id.toString()}>{d.nom} ({d.code})</SelectItem>)}</SelectContent>
-                      </Select><FormMessage />
+                      <SearchableSelect
+                        options={domaines.map((d) => ({ value: d.id.toString(), label: `${d.nom} (${d.code})` }))}
+                        value={field.value?.toString()}
+                        onValueChange={(v) => field.onChange(Number(v))}
+                        placeholder="Sélectionner un domaine"
+                        searchPlaceholder="Rechercher domaine..."
+                      /><FormMessage />
                     </FormItem>
                   )} />
                 ) : (
@@ -201,25 +204,28 @@ export default function QualiteWizard() {
                 )}
                 <FormField control={form.control} name="campagne_id" render={({ field }) => (
                   <FormItem><FormLabel>Campagne</FormLabel>
-                    <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger></FormControl>
-                      <SelectContent>{campagnes.map((c) => <SelectItem key={c.id} value={c.id.toString()}>{c.code_campagne}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
+                    <SearchableSelect
+                      options={campagnes.map((c) => ({ value: c.id.toString(), label: c.code_campagne }))}
+                      value={field.value?.toString()}
+                      onValueChange={(v) => field.onChange(Number(v))}
+                      placeholder="Sélectionner campagne"
+                      searchPlaceholder="Rechercher campagne..."
+                    /><FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="variete_id" render={({ field }) => (
                   <FormItem><FormLabel>Code Variété</FormLabel>
-                    <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger></FormControl>
-                      <SelectContent>{varietes.map((v) => (
-                        <SelectItem key={v.id} value={v.id.toString()}>
-                          <div className="flex items-center gap-2">
-                            <Badge style={{ backgroundColor: (v.types_varietes as any)?.couleur_badge || "#999", color: "#fff" }} className="text-xs">{(v.types_varietes as any)?.type_code}</Badge>
-                            {v.code_variete} - {v.nom_commercial}
-                          </div>
-                        </SelectItem>
-                      ))}</SelectContent>
-                    </Select><FormMessage />
+                    <SearchableSelect
+                      options={varietes.map((v) => ({
+                        value: v.id.toString(),
+                        label: `${v.code_variete} - ${v.nom_commercial || ""}`,
+                        badge: (v.types_varietes as any)?.type_code ? { text: (v.types_varietes as any).type_code, color: (v.types_varietes as any)?.couleur_badge || "#999" } : undefined,
+                      }))}
+                      value={field.value?.toString()}
+                      onValueChange={(v) => field.onChange(Number(v))}
+                      placeholder="Rechercher variété..."
+                      searchPlaceholder="Code ou nom..."
+                    /><FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="porte_greffe_id" render={({ field }) => (
