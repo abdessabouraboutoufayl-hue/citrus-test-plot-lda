@@ -31,13 +31,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUserInfo = async (userId: string) => {
-    const [roleRes, profileRes] = await Promise.all([
-      supabase.from("user_roles").select("role, domaine_id").eq("user_id", userId).maybeSingle(),
+    const [rolesRes, profileRes] = await Promise.all([
+      supabase.from("user_roles").select("role, domaine_id").eq("user_id", userId),
       supabase.from("profiles").select("nom_complet, email").eq("id", userId).maybeSingle(),
     ]);
+    const roles = rolesRes.data || [];
+    // Prioritize responsable_central > direction > responsable_domaine
+    const priorityOrder = ["responsable_central", "direction", "responsable_domaine"];
+    const sortedRoles = [...roles].sort((a, b) => priorityOrder.indexOf(a.role) - priorityOrder.indexOf(b.role));
+    const primaryRole = sortedRoles[0] || null;
+    // For responsable_central, get domaine_id from their responsable_domaine role if exists
+    const domaineRole = roles.find(r => r.domaine_id != null);
     setUserInfo({
-      role: roleRes.data?.role ?? null,
-      domaineId: roleRes.data?.domaine_id ?? null,
+      role: primaryRole?.role ?? null,
+      domaineId: domaineRole?.domaine_id ?? null,
       nomComplet: profileRes.data?.nom_complet ?? null,
       email: profileRes.data?.email ?? null,
     });
