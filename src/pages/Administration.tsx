@@ -399,14 +399,17 @@ function DomaineVarietesTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedDomaine, setSelectedDomaine] = useState("");
+  const [selectedPorteGreffe, setSelectedPorteGreffe] = useState("");
   const [selectedVarietes, setSelectedVarietes] = useState<string[]>([]);
+  const [nbArbres, setNbArbres] = useState("5");
+  const [filterDomaine, setFilterDomaine] = useState("");
 
   const { data: links = [], isLoading } = useQuery({
     queryKey: ["admin-domaine-varietes"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("domaine_varietes")
-        .select("*, domaines(nom, code), varietes(code_variete, nom_commercial)")
+        .select("*, domaines(nom, code), varietes(code_variete, nom_commercial), porte_greffes(code_pg, nom_pg)")
         .order("domaine_id");
       if (error) throw error;
       return data;
@@ -431,9 +434,18 @@ function DomaineVarietesTab() {
     },
   });
 
-  // Get already linked variete IDs for selected domaine
+  const { data: porteGreffes = [] } = useQuery({
+    queryKey: ["admin-porte-greffes"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("porte_greffes").select("id, code_pg, nom_pg").order("nom_pg");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Filter already linked for selected domaine + porte-greffe combo
   const linkedVarieteIds = links
-    .filter(l => String(l.domaine_id) === selectedDomaine)
+    .filter(l => String(l.domaine_id) === selectedDomaine && String(l.porte_greffe_id) === selectedPorteGreffe)
     .map(l => String(l.variete_id));
 
   const toggleVariete = (id: string) => {
@@ -447,6 +459,8 @@ function DomaineVarietesTab() {
       const rows = selectedVarietes.map(vid => ({
         domaine_id: Number(selectedDomaine),
         variete_id: Number(vid),
+        porte_greffe_id: Number(selectedPorteGreffe),
+        nb_arbres: Number(nbArbres) || 5,
       }));
       const { error } = await supabase.from("domaine_varietes").insert(rows);
       if (error) throw error;
@@ -456,7 +470,9 @@ function DomaineVarietesTab() {
       toast.success(`${selectedVarietes.length} variété(s) associée(s)`);
       setOpen(false);
       setSelectedDomaine("");
+      setSelectedPorteGreffe("");
       setSelectedVarietes([]);
+      setNbArbres("5");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -473,77 +489,106 @@ function DomaineVarietesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const filteredLinks = filterDomaine
+    ? links.filter(l => String(l.domaine_id) === filterDomaine)
+    : links;
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">Domaine ↔ Variétés</CardTitle>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><PlusCircle className="h-4 w-4 mr-1" /> Associer</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Associer des variétés à un domaine</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Domaine</Label>
-                <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedVarietes([]); }}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
-                  <SelectContent>
-                    {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedDomaine && (
+      <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+        <CardTitle className="text-lg">Domaine ↔ Variétés ↔ Porte-greffes</CardTitle>
+        <div className="flex items-center gap-2">
+          <Select value={filterDomaine} onValueChange={setFilterDomaine}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filtrer par domaine" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les domaines</SelectItem>
+              {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm"><PlusCircle className="h-4 w-4 mr-1" /> Associer</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Associer des variétés à un domaine</DialogTitle></DialogHeader>
+              <div className="space-y-4">
                 <div>
-                  <Label className="mb-2 block">Variétés</Label>
-                  <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-3">
-                    {varietes
-                      .filter(v => !linkedVarieteIds.includes(String(v.id)))
-                      .map(v => (
-                        <div key={v.id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`var-${v.id}`}
-                            checked={selectedVarietes.includes(String(v.id))}
-                            onCheckedChange={() => toggleVariete(String(v.id))}
-                          />
-                          <label htmlFor={`var-${v.id}`} className="text-sm cursor-pointer">
-                            {v.code_variete} — {v.nom_commercial || ""}
-                          </label>
-                        </div>
-                      ))}
-                    {varietes.filter(v => !linkedVarieteIds.includes(String(v.id))).length === 0 && (
-                      <p className="text-sm text-muted-foreground">Toutes les variétés sont déjà associées.</p>
-                    )}
-                  </div>
+                  <Label>Domaine</Label>
+                  <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedVarietes([]); }}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
+                    <SelectContent>
+                      {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={!selectedDomaine || selectedVarietes.length === 0 || createMutation.isPending}>
-                Associer ({selectedVarietes.length})
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <div>
+                  <Label>Porte-greffe</Label>
+                  <Select value={selectedPorteGreffe} onValueChange={v => { setSelectedPorteGreffe(v); setSelectedVarietes([]); }}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner un porte-greffe" /></SelectTrigger>
+                    <SelectContent>
+                      {porteGreffes.map(pg => <SelectItem key={pg.id} value={String(pg.id)}>{pg.code_pg} — {pg.nom_pg}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Nombre d'arbres</Label>
+                  <Input type="number" min={1} value={nbArbres} onChange={e => setNbArbres(e.target.value)} />
+                </div>
+                {selectedDomaine && selectedPorteGreffe && (
+                  <div>
+                    <Label className="mb-2 block">Variétés</Label>
+                    <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-3">
+                      {varietes
+                        .filter(v => !linkedVarieteIds.includes(String(v.id)))
+                        .map(v => (
+                          <div key={v.id} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`var-${v.id}`}
+                              checked={selectedVarietes.includes(String(v.id))}
+                              onCheckedChange={() => toggleVariete(String(v.id))}
+                            />
+                            <label htmlFor={`var-${v.id}`} className="text-sm cursor-pointer">
+                              {v.code_variete} — {v.nom_commercial || ""}
+                            </label>
+                          </div>
+                        ))}
+                      {varietes.filter(v => !linkedVarieteIds.includes(String(v.id))).length === 0 && (
+                        <p className="text-sm text-muted-foreground">Toutes les variétés sont déjà associées.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={() => createMutation.mutate()} disabled={!selectedDomaine || !selectedPorteGreffe || selectedVarietes.length === 0 || createMutation.isPending}>
+                  Associer ({selectedVarietes.length})
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
+        <div className="text-sm text-muted-foreground mb-2">{filteredLinks.length} association(s)</div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Domaine</TableHead>
               <TableHead>Variété</TableHead>
-              <TableHead>Nom commercial</TableHead>
+              <TableHead>Porte-greffe</TableHead>
+              <TableHead>Nb arbres</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : links.map((l) => (
+              <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
+            ) : filteredLinks.map((l) => (
               <TableRow key={l.id}>
                 <TableCell className="font-medium">{(l.domaines as any)?.nom}</TableCell>
                 <TableCell><Badge variant="outline">{(l.varietes as any)?.code_variete}</Badge></TableCell>
-                <TableCell>{(l.varietes as any)?.nom_commercial || "—"}</TableCell>
+                <TableCell>{(l.porte_greffes as any)?.code_pg || "—"}</TableCell>
+                <TableCell>{l.nb_arbres}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(l.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
