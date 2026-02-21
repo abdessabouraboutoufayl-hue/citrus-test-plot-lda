@@ -7,27 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { toast } from "sonner";
-import { Flower2, Leaf, TreeDeciduous, Cherry, Sun, Paintbrush, Check, Clock, CalendarDays, Bell, BellOff, Info } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { Flower2, Leaf, TreeDeciduous, Cherry, Sun, Paintbrush, Check, CalendarDays, Bell, BellOff, Info } from "lucide-react";
+import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 const STADES = [
-  { key: "repos", num: 1, label: "Repos végétatif", icon: TreeDeciduous, color: "bg-gray-400", critical: false },
-  { key: "debourrement", num: 2, label: "Débourrement", icon: Leaf, color: "bg-lime-500", critical: false },
-  { key: "boutons_floraux", num: 3, label: "Boutons floraux visibles", icon: Flower2, color: "bg-yellow-400", critical: false },
-  { key: "prefloraison", num: 4, label: "Pré-floraison", icon: Flower2, color: "bg-yellow-400", critical: false },
+  { key: "repos", num: 1, label: "Repos végétatif", icon: TreeDeciduous, color: "bg-gray-400" },
+  { key: "debourrement", num: 2, label: "Débourrement", icon: Leaf, color: "bg-lime-500" },
+  { key: "boutons_floraux", num: 3, label: "Boutons floraux visibles", icon: Flower2, color: "bg-yellow-400" },
+  { key: "prefloraison", num: 4, label: "Pré-floraison", icon: Flower2, color: "bg-yellow-400" },
   { key: "floraison", num: 5, label: "Floraison", icon: Flower2, color: "bg-pink-500", critical: true },
-  { key: "chute_petales", num: 6, label: "Chute pétales", icon: Leaf, color: "bg-pink-300", critical: false },
-  { key: "nouaison", num: 7, label: "Nouaison", icon: Cherry, color: "bg-orange-500", critical: false },
+  { key: "chute_petales", num: 6, label: "Chute pétales", icon: Leaf, color: "bg-pink-300" },
+  { key: "nouaison", num: 7, label: "Nouaison", icon: Cherry, color: "bg-orange-500" },
   { key: "chute_physio", num: 8, label: "Chute physiologique", icon: Cherry, color: "bg-red-500", critical: true },
-  { key: "grossissement", num: 9, label: "Grossissement fruits", icon: Sun, color: "bg-amber-400", critical: false },
-  { key: "veraison", num: 10, label: "Véraison", icon: Paintbrush, color: "bg-purple-500", critical: false },
-  { key: "debut_maturite", num: 11, label: "Début maturité", icon: Check, color: "bg-green-500", critical: false },
-  { key: "maturite_recolte", num: 12, label: "Maturité récolte", icon: Check, color: "bg-green-700", critical: false },
+  { key: "grossissement", num: 9, label: "Grossissement fruits", icon: Sun, color: "bg-amber-400" },
+  { key: "veraison", num: 10, label: "Véraison", icon: Paintbrush, color: "bg-purple-500" },
+  { key: "debut_maturite", num: 11, label: "Début maturité", icon: Check, color: "bg-green-500" },
+  { key: "maturite_recolte", num: 12, label: "Maturité récolte", icon: Check, color: "bg-green-700" },
 ];
 
 function getStadeDateField(key: string): string {
@@ -36,17 +34,23 @@ function getStadeDateField(key: string): string {
   return `stade_${key}_date_debut`;
 }
 
+function getStadeObsField(key: string): string {
+  if (key === "debut_maturite") return "stade_debut_maturite_observations";
+  if (key === "maturite_recolte") return "stade_maturite_recolte_observations";
+  return `stade_${key}_observations`;
+}
+
 export default function PhenologieSuivi() {
   const { session, userInfo } = useAuth();
   const queryClient = useQueryClient();
 
-  const [selectedCampagne, setSelectedCampagne] = useState<string>("");
-  const [selectedVariete, setSelectedVariete] = useState<string>("");
+  const [selectedCampagne, setSelectedCampagne] = useState("");
+  const [selectedVariete, setSelectedVariete] = useState("");
+  const [selectedStade, setSelectedStade] = useState("");
+  const [stadeDate, setStadeDate] = useState("");
+  const [stadeObs, setStadeObs] = useState("");
   const [observateurNom, setObservateurNom] = useState(userInfo.nomComplet || "");
-  const [conditionsMeteo, setConditionsMeteo] = useState("");
-  const [temperatureMoyenne, setTemperatureMoyenne] = useState("");
   const [rappelActif, setRappelActif] = useState(true);
-  const [formData, setFormData] = useState<Record<string, any>>({});
 
   const { data: campagnes } = useQuery({
     queryKey: ["campagnes"],
@@ -73,6 +77,7 @@ export default function PhenologieSuivi() {
   });
 
   const userDomaine = domaines?.find((d) => d.id === userInfo.domaineId);
+  const selectedVarieteObj = varietes?.find((v) => v.id.toString() === selectedVariete);
 
   const { data: phenoRecord } = useQuery({
     queryKey: ["phenologie", selectedCampagne, selectedVariete, userInfo.domaineId],
@@ -90,80 +95,52 @@ export default function PhenologieSuivi() {
     enabled: !!selectedCampagne && !!selectedVariete && !!userInfo.domaineId,
   });
 
+  // When stade selection changes, load existing data for that stade
   useEffect(() => {
-    if (phenoRecord) {
-      const data: Record<string, any> = {};
-      STADES.forEach((s) => {
-        const dateField = getStadeDateField(s.key);
-        data[dateField] = (phenoRecord as any)[dateField] || "";
-        const obsField = s.key === "debut_maturite" ? "stade_debut_maturite_observations" : s.key === "maturite_recolte" ? "stade_maturite_recolte_observations" : `stade_${s.key}_observations`;
-        data[obsField] = (phenoRecord as any)[obsField] || "";
-      });
-      data.stade_floraison_date_fin = phenoRecord.stade_floraison_date_fin || "";
-      data.stade_floraison_intensite = phenoRecord.stade_floraison_intensite || "";
-      data.stade_floraison_pct_arbres = phenoRecord.stade_floraison_pct_arbres ?? "";
-      data.stade_floraison_nb_fleurs_estime = phenoRecord.stade_floraison_nb_fleurs_estime ?? "";
-      data.stade_nouaison_taux_pct = phenoRecord.stade_nouaison_taux_pct ?? "";
-      data.stade_chute_physio_date_fin = phenoRecord.stade_chute_physio_date_fin || "";
-      data.stade_chute_physio_intensite = phenoRecord.stade_chute_physio_intensite || "";
-      data.stade_chute_physio_taux_pct = phenoRecord.stade_chute_physio_taux_pct ?? "";
-      data.stade_veraison_pct_fruits_colores = phenoRecord.stade_veraison_pct_fruits_colores ?? "";
-      setConditionsMeteo(phenoRecord.conditions_meteo_generales || "");
-      setTemperatureMoyenne(phenoRecord.temperature_moyenne_periode?.toString() || "");
-      setObservateurNom(phenoRecord.observateur_nom || userInfo.nomComplet || "");
-      setFormData(data);
+    if (phenoRecord && selectedStade) {
+      const dateField = getStadeDateField(selectedStade);
+      const obsField = getStadeObsField(selectedStade);
+      setStadeDate((phenoRecord as any)[dateField] || "");
+      setStadeObs((phenoRecord as any)[obsField] || "");
     } else {
-      setFormData({});
+      setStadeDate("");
+      setStadeObs("");
     }
-  }, [phenoRecord]);
+  }, [selectedStade, phenoRecord]);
 
-  const updateField = (key: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
-  };
+  const isStadeCompleted = (key: string) => phenoRecord ? !!(phenoRecord as any)[getStadeDateField(key)] : false;
+  const completedCount = STADES.filter((s) => isStadeCompleted(s.key)).length;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedCampagne || !selectedVariete) {
-        throw new Error("Veuillez sélectionner campagne et variété");
-      }
-      if (!userInfo.domaineId) {
-        throw new Error("Aucun domaine associé à votre compte");
-      }
-      if (!session?.user?.id) {
-        throw new Error("Vous devez être connecté pour enregistrer");
-      }
+      if (!selectedCampagne || !selectedVariete) throw new Error("Veuillez sélectionner campagne et variété");
+      if (!userInfo.domaineId) throw new Error("Aucun domaine associé à votre compte");
+      if (!session?.user?.id) throw new Error("Vous devez être connecté");
+      if (!selectedStade) throw new Error("Veuillez sélectionner un stade");
+      if (!stadeDate) throw new Error("Veuillez saisir une date");
+
+      const dateField = getStadeDateField(selectedStade);
+      const obsField = getStadeObsField(selectedStade);
+
       const payload: any = {
         domaine_id: userInfo.domaineId,
         campagne_id: Number(selectedCampagne),
         variete_id: Number(selectedVariete),
         date_observation: new Date().toISOString().split("T")[0],
         observateur_nom: observateurNom,
-        conditions_meteo_generales: conditionsMeteo || null,
-        temperature_moyenne_periode: temperatureMoyenne ? Number(temperatureMoyenne) : null,
         user_id: session.user.id,
+        [dateField]: stadeDate,
+        [obsField]: stadeObs || null,
       };
-      Object.entries(formData).forEach(([key, val]) => {
-        if (val === "" || val === undefined) {
-          payload[key] = null;
-        } else if (key.includes("pct") || key.includes("taux") || key.includes("nb_fleurs") || key.includes("temperature")) {
-          payload[key] = Number(val);
-        } else {
-          payload[key] = val;
-        }
-      });
 
       if (phenoRecord) {
         const { error } = await supabase.from("phenologie").update(payload).eq("id", phenoRecord.id);
         if (error) throw error;
-        const stadesObserves = STADES.filter((s) => {
-          const dateField = getStadeDateField(s.key);
-          return formData[dateField];
-        }).map((s) => s.label);
         await supabase.from("phenologie_observations").insert({
           phenologie_id: phenoRecord.id,
           date_observation: payload.date_observation,
-          stades_observes: stadesObserves,
-          notes: conditionsMeteo || null,
+          stades_observes: [STADES.find((s) => s.key === selectedStade)?.label],
+          notes: stadeObs || null,
           observateur_nom: observateurNom,
         });
       } else {
@@ -172,7 +149,7 @@ export default function PhenologieSuivi() {
         await supabase.from("phenologie_observations").insert({
           phenologie_id: data.id,
           date_observation: payload.date_observation,
-          stades_observes: [],
+          stades_observes: [STADES.find((s) => s.key === selectedStade)?.label],
           notes: "Première observation",
           observateur_nom: observateurNom,
         });
@@ -180,13 +157,10 @@ export default function PhenologieSuivi() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["phenologie"] });
-      toast.success("Observation phénologique enregistrée");
+      toast.success("Observation enregistrée");
     },
     onError: (e: any) => toast.error(e.message),
   });
-
-  const isStadeCompleted = (key: string) => !!formData[getStadeDateField(key)];
-  const completedCount = STADES.filter((s) => isStadeCompleted(s.key)).length;
 
   return (
     <div className="space-y-6">
@@ -233,6 +207,7 @@ export default function PhenologieSuivi() {
 
       {selectedCampagne && selectedVariete && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Timeline */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -244,7 +219,7 @@ export default function PhenologieSuivi() {
                 {STADES.map((stade, idx) => {
                   const completed = isStadeCompleted(stade.key);
                   const dateField = getStadeDateField(stade.key);
-                  const dateVal = formData[dateField];
+                  const dateVal = phenoRecord ? (phenoRecord as any)[dateField] : null;
                   return (
                     <div key={stade.key} className="relative pb-6 last:pb-0">
                       {idx < STADES.length - 1 && (
@@ -275,98 +250,67 @@ export default function PhenologieSuivi() {
             </CardContent>
           </Card>
 
+          {/* Formulaire de saisie */}
           <Card className="lg:col-span-3">
             <CardHeader>
-              <CardTitle className="text-base">Checklist des stades</CardTitle>
+              <CardTitle className="text-base">Saisie observation</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Accordion type="multiple" className="space-y-1">
-                {STADES.map((stade) => {
-                  const completed = isStadeCompleted(stade.key);
-                  const dateField = getStadeDateField(stade.key);
-                  const obsField = stade.key === "debut_maturite" ? "stade_debut_maturite_observations" : stade.key === "maturite_recolte" ? "stade_maturite_recolte_observations" : `stade_${stade.key}_observations`;
-                  const Icon = stade.icon;
-                  return (
-                    <AccordionItem key={stade.key} value={stade.key} className="border rounded-lg px-3">
-                      <AccordionTrigger className="text-sm hover:no-underline py-3">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${completed ? stade.color : "bg-muted"}`} />
-                          <Icon className="h-4 w-4" />
-                          <span>{stade.critical && "⭐ "}{stade.num}. {stade.label}</span>
-                          {completed && <Check className="h-3 w-3 text-green-500" />}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="space-y-3 pb-4">
-                        <div>
-                          <Label className="text-xs">Date début</Label>
-                          <Input type="date" value={formData[dateField] || ""} onChange={(e) => updateField(dateField, e.target.value)} className="h-9" />
-                        </div>
-                        {stade.key === "floraison" && (
-                          <>
-                            <div>
-                              <Label className="text-xs">Date fin</Label>
-                              <Input type="date" value={formData.stade_floraison_date_fin || ""} onChange={(e) => updateField("stade_floraison_date_fin", e.target.value)} className="h-9" />
-                            </div>
-                            {formData.stade_floraison_date_debut && formData.stade_floraison_date_fin && (
-                              <p className="text-xs text-muted-foreground">Durée : {differenceInDays(new Date(formData.stade_floraison_date_fin), new Date(formData.stade_floraison_date_debut))}j (auto-calculé)</p>
-                            )}
-                            <div>
-                              <Label className="text-xs">Intensité</Label>
-                              <RadioGroup value={formData.stade_floraison_intensite || ""} onValueChange={(v) => updateField("stade_floraison_intensite", v)} className="flex gap-4 mt-1">
-                                {["Faible", "Moyenne", "Élevée"].map((v) => (
-                                  <div key={v} className="flex items-center gap-1"><RadioGroupItem value={v} id={`flor-${v}`} /><Label htmlFor={`flor-${v}`} className="text-xs">{v}</Label></div>
-                                ))}
-                              </RadioGroup>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div><Label className="text-xs">% Arbres en fleur</Label><Input type="number" min={0} max={100} value={formData.stade_floraison_pct_arbres ?? ""} onChange={(e) => updateField("stade_floraison_pct_arbres", e.target.value)} className="h-9" /></div>
-                              <div><Label className="text-xs">Nb fleurs estimé</Label><Input type="number" value={formData.stade_floraison_nb_fleurs_estime ?? ""} onChange={(e) => updateField("stade_floraison_nb_fleurs_estime", e.target.value)} className="h-9" /></div>
-                            </div>
-                          </>
-                        )}
-                        {stade.key === "nouaison" && (
-                          <div><Label className="text-xs">Taux nouaison %</Label><Input type="number" min={0} max={100} value={formData.stade_nouaison_taux_pct ?? ""} onChange={(e) => updateField("stade_nouaison_taux_pct", e.target.value)} className="h-9" /></div>
-                        )}
-                        {stade.key === "chute_physio" && (
-                          <>
-                            <div><Label className="text-xs">Date fin</Label><Input type="date" value={formData.stade_chute_physio_date_fin || ""} onChange={(e) => updateField("stade_chute_physio_date_fin", e.target.value)} className="h-9" /></div>
-                            {formData.stade_chute_physio_date_debut && formData.stade_chute_physio_date_fin && (
-                              <p className="text-xs text-muted-foreground">Durée : {differenceInDays(new Date(formData.stade_chute_physio_date_fin), new Date(formData.stade_chute_physio_date_debut))}j</p>
-                            )}
-                            <div>
-                              <Label className="text-xs">Intensité</Label>
-                              <RadioGroup value={formData.stade_chute_physio_intensite || ""} onValueChange={(v) => updateField("stade_chute_physio_intensite", v)} className="flex gap-4 mt-1">
-                                {["Faible", "Moyenne", "Intense"].map((v) => (
-                                  <div key={v} className="flex items-center gap-1"><RadioGroupItem value={v} id={`chute-${v}`} /><Label htmlFor={`chute-${v}`} className="text-xs">{v}</Label></div>
-                                ))}
-                              </RadioGroup>
-                            </div>
-                            <div><Label className="text-xs">Taux chute estimé %</Label><Input type="number" min={0} max={100} value={formData.stade_chute_physio_taux_pct ?? ""} onChange={(e) => updateField("stade_chute_physio_taux_pct", e.target.value)} className="h-9" /></div>
-                          </>
-                        )}
-                        {stade.key === "veraison" && (
-                          <div><Label className="text-xs">% Fruits colorés</Label><Input type="number" min={0} max={100} value={formData.stade_veraison_pct_fruits_colores ?? ""} onChange={(e) => updateField("stade_veraison_pct_fruits_colores", e.target.value)} className="h-9" /></div>
-                        )}
-                        <div>
-                          <Label className="text-xs">Observations</Label>
-                          <Textarea value={formData[obsField] || ""} onChange={(e) => updateField(obsField, e.target.value)} rows={2} className="text-sm" />
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-
-              <div className="mt-6 space-y-3 pt-4 border-t">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div><Label className="text-xs">Observateur</Label><Input value={observateurNom} onChange={(e) => setObservateurNom(e.target.value)} className="h-9" /></div>
-                  <div><Label className="text-xs">Température moyenne °C</Label><Input type="number" step="0.1" value={temperatureMoyenne} onChange={(e) => setTemperatureMoyenne(e.target.value)} className="h-9" /></div>
-                  <div><Label className="text-xs">Conditions météo</Label><Input value={conditionsMeteo} onChange={(e) => setConditionsMeteo(e.target.value)} className="h-9" placeholder="Temps sec, T° 18-25°C" /></div>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Nom domaine</Label>
+                  <Input value={userDomaine?.nom || ""} disabled className="h-9 bg-muted" />
                 </div>
-                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !observateurNom} className="w-full">
-                  💾 Enregistrer observation
-                </Button>
+                <div>
+                  <Label className="text-xs">Date observation</Label>
+                  <Input type="date" value={new Date().toISOString().split("T")[0]} disabled className="h-9 bg-muted" />
+                </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Type variété</Label>
+                  <Input value={selectedVarieteObj?.types_varietes?.type_nom || "-"} disabled className="h-9 bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">Code variété</Label>
+                  <Input value={selectedVarieteObj?.code_variete || "-"} disabled className="h-9 bg-muted" />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs">Stade phénologique</Label>
+                <SearchableSelect
+                  options={STADES.map((s) => ({
+                    value: s.key,
+                    label: `${s.num}. ${s.label}`,
+                    sublabel: isStadeCompleted(s.key) ? "✅ Déjà renseigné" : undefined,
+                  }))}
+                  value={selectedStade}
+                  onValueChange={setSelectedStade}
+                  placeholder="Sélectionner un stade..."
+                />
+              </div>
+
+              {selectedStade && (
+                <>
+                  <div>
+                    <Label className="text-xs">Date du stade</Label>
+                    <Input type="date" value={stadeDate} onChange={(e) => setStadeDate(e.target.value)} className="h-9" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Observateur</Label>
+                    <Input value={observateurNom} onChange={(e) => setObservateurNom(e.target.value)} className="h-9" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Observations</Label>
+                    <Textarea value={stadeObs} onChange={(e) => setStadeObs(e.target.value)} rows={3} className="text-sm" placeholder="Notes sur ce stade..." />
+                  </div>
+                  <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !observateurNom || !stadeDate} className="w-full">
+                    💾 Enregistrer observation
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
