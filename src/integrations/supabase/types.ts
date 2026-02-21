@@ -46,18 +46,24 @@ export type Database = {
           created_at: string | null
           domaine_id: number
           id: number
+          nb_arbres: number
+          porte_greffe_id: number | null
           variete_id: number
         }
         Insert: {
           created_at?: string | null
           domaine_id: number
           id?: number
+          nb_arbres?: number
+          porte_greffe_id?: number | null
           variete_id: number
         }
         Update: {
           created_at?: string | null
           domaine_id?: number
           id?: number
+          nb_arbres?: number
+          porte_greffe_id?: number | null
           variete_id?: number
         }
         Relationships: [
@@ -66,6 +72,13 @@ export type Database = {
             columns: ["domaine_id"]
             isOneToOne: false
             referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "domaine_varietes_porte_greffe_id_fkey"
+            columns: ["porte_greffe_id"]
+            isOneToOne: false
+            referencedRelation: "porte_greffes"
             referencedColumns: ["id"]
           },
           {
