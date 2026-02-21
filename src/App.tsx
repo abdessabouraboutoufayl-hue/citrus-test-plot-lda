@@ -12,6 +12,9 @@ import Validation from "@/pages/Validation";
 import Profile from "@/pages/Profile";
 import NotFound from "@/pages/NotFound";
 import Administration from "@/pages/Administration";
+import QualiteWizard from "@/pages/QualiteWizard";
+import QualiteList from "@/pages/QualiteList";
+import QualiteDashboard from "@/pages/QualiteDashboard";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +39,9 @@ function AppRoutes() {
         <Route path="/production" element={<ProductionList />} />
         <Route path="/production/new" element={<ProductionWizard />} />
         <Route path="/production/dashboard" element={<Dashboard />} />
+        <Route path="/qualite" element={<QualiteList />} />
+        <Route path="/qualite/new" element={<QualiteWizard />} />
+        <Route path="/qualite/dashboard" element={<QualiteDashboard />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/admin" element={<Administration />} />
         <Route path="/profile" element={<Profile />} />

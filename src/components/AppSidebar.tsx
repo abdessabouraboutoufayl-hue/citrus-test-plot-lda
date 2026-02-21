@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -17,16 +17,22 @@ import { Button } from "@/components/ui/button";
 export function AppSidebar() {
   const { userInfo, signOut } = useAuth();
 
-  const navItems = [
-    { title: "Tableau de bord", url: "/dashboard", icon: LayoutDashboard },
+  const productionItems = [
     { title: "Nouvelle saisie", url: "/production/new", icon: PlusCircle },
     { title: "Liste production", url: "/production", icon: List },
-    { title: "Dashboard analytique", url: "/production/dashboard", icon: BarChart3 },
+    { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3 },
   ];
 
+  const qualiteItems = [
+    { title: "Nouvelle analyse", url: "/qualite/new", icon: PlusCircle },
+    { title: "Liste analyses", url: "/qualite", icon: List },
+    { title: "Dashboard qualité", url: "/qualite/dashboard", icon: BarChart3 },
+  ];
+
+  const adminItems: typeof productionItems = [];
   if (userInfo.role === "responsable_central") {
-    navItems.push({ title: "Validation", url: "/validation", icon: CheckSquare });
-    navItems.push({ title: "Administration", url: "/admin", icon: Settings });
+    adminItems.push({ title: "Validation", url: "/validation", icon: CheckSquare });
+    adminItems.push({ title: "Administration", url: "/admin", icon: Settings });
   }
 
   return (
@@ -43,20 +49,28 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink to="/dashboard" end className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                    <LayoutDashboard className="h-4 w-4" /><span>Tableau de bord</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-sidebar-foreground/50">📊 Production</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {productionItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/dashboard"}
-                      className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                    <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <item.icon className="h-4 w-4" /><span>{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -64,6 +78,42 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-sidebar-foreground/50">🍊 Qualité Interne</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {qualiteItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <item.icon className="h-4 w-4" /><span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {adminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/50">Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild>
+                      <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                        <item.icon className="h-4 w-4" /><span>{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-4">

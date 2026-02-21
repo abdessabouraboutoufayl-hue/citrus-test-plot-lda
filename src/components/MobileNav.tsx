@@ -1,11 +1,11 @@
-import { LayoutDashboard, List, PlusCircle, User } from "lucide-react";
+import { LayoutDashboard, List, FlaskConical, User, PlusCircle } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
 export function MobileNav() {
   const items = [
     { title: "Accueil", url: "/dashboard", icon: LayoutDashboard },
-    { title: "Liste", url: "/production", icon: List },
-    { title: "Nouveau", url: "/production/new", icon: PlusCircle },
+    { title: "Production", url: "/production", icon: List },
+    { title: "Qualité", url: "/qualite", icon: FlaskConical },
     { title: "Profil", url: "/profile", icon: User },
   ];
 
