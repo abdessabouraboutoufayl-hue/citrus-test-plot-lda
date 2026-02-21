@@ -525,39 +525,28 @@ function DomaineVarietesTab() {
               <div className="space-y-4">
                 <div>
                   <Label>Domaine</Label>
-                  <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedVarietes([]); }}>
+                  <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedType(""); setSelectedVarietes([]); setSelectedPorteGreffe(""); }}>
                     <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
                     <SelectContent>
                       {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Porte-greffe</Label>
-                  <Select value={selectedPorteGreffe} onValueChange={v => { setSelectedPorteGreffe(v); setSelectedVarietes([]); }}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner un porte-greffe" /></SelectTrigger>
-                    <SelectContent>
-                      {porteGreffes.map(pg => <SelectItem key={pg.id} value={String(pg.id)}>{pg.code_pg} — {pg.nom_pg}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Type de variété</Label>
-                  <Select value={selectedType} onValueChange={v => { setSelectedType(v); setSelectedVarietes([]); }}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
-                    <SelectContent>
-                      {typesVarietes.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Nombre d'arbres</Label>
-                  <Input type="number" min={1} value={nbArbres} onChange={e => setNbArbres(e.target.value)} />
-                </div>
-                {selectedDomaine && selectedPorteGreffe && selectedType && (
+                {selectedDomaine && (
                   <div>
-                    <Label className="mb-2 block">Codes variétés ({selectedType && typesVarietes.find(t => String(t.id) === selectedType)?.type_nom})</Label>
-                    <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-3">
+                    <Label>Type de variété</Label>
+                    <Select value={selectedType} onValueChange={v => { setSelectedType(v); setSelectedVarietes([]); }}>
+                      <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
+                      <SelectContent>
+                        {typesVarietes.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {selectedDomaine && selectedType && (
+                  <div>
+                    <Label className="mb-2 block">Codes variétés ({typesVarietes.find(t => String(t.id) === selectedType)?.type_nom})</Label>
+                    <div className="max-h-48 overflow-y-auto space-y-2 border rounded-md p-3">
                       {varietes
                         .filter(v => String(v.type_id) === selectedType && !linkedVarieteIds.includes(String(v.id)))
                         .map(v => (
@@ -576,6 +565,23 @@ function DomaineVarietesTab() {
                         <p className="text-sm text-muted-foreground">Toutes les variétés de ce type sont déjà associées.</p>
                       )}
                     </div>
+                  </div>
+                )}
+                {selectedVarietes.length > 0 && (
+                  <div>
+                    <Label>Porte-greffe</Label>
+                    <Select value={selectedPorteGreffe} onValueChange={setSelectedPorteGreffe}>
+                      <SelectTrigger><SelectValue placeholder="Sélectionner un porte-greffe" /></SelectTrigger>
+                      <SelectContent>
+                        {porteGreffes.map(pg => <SelectItem key={pg.id} value={String(pg.id)}>{pg.code_pg} — {pg.nom_pg}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {selectedPorteGreffe && (
+                  <div>
+                    <Label>Nombre d'arbres</Label>
+                    <Input type="number" min={1} value={nbArbres} onChange={e => setNbArbres(e.target.value)} />
                   </div>
                 )}
               </div>
