@@ -123,8 +123,14 @@ export default function PhenologieSuivi() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedCampagne || !selectedVariete || !userInfo.domaineId || !session?.user?.id) {
+      if (!selectedCampagne || !selectedVariete) {
         throw new Error("Veuillez sélectionner campagne et variété");
+      }
+      if (!userInfo.domaineId) {
+        throw new Error("Aucun domaine associé à votre compte");
+      }
+      if (!session?.user?.id) {
+        throw new Error("Vous devez être connecté pour enregistrer");
       }
       const payload: any = {
         domaine_id: userInfo.domaineId,
