@@ -272,6 +272,155 @@ export type Database = {
         }
         Relationships: []
       }
+      qualite_interne: {
+        Row: {
+          acidite_gl: number
+          alerte_brix_hors_norme: boolean | null
+          alerte_ea_faible: boolean | null
+          alerte_granulation_severe: boolean | null
+          annee_analyse: number | null
+          brix_degres: number
+          campagne_id: number
+          commentaires_validation: string | null
+          created_at: string | null
+          date_analyse: string
+          domaine_id: number
+          granulation_legere: string | null
+          granulation_severe: string | null
+          id: number
+          is_offline_draft: boolean | null
+          maturite_optimale: boolean | null
+          mois_analyse: number | null
+          moyenne_fermete_fruit_kg_cm2: number | null
+          moyenne_fermete_peau_kg_cm2: number | null
+          moyenne_pepins_par_fruit: number | null
+          nb_fruits_avec_pepins: number | null
+          nb_fruits_echantillon: number
+          nb_pepins_echantillon_total: number | null
+          observations: string | null
+          pct_jus: number | null
+          photo_fruits_coupes_url: string | null
+          photo_legende: string | null
+          poids_jus_g: number | null
+          porte_greffe_id: number
+          ratio_ea: number | null
+          statut_validation: string | null
+          technicien_nom: string
+          updated_at: string | null
+          user_id: string
+          variete_id: number
+          volume_jus_ml: number | null
+          volume_naoh_ml: number | null
+        }
+        Insert: {
+          acidite_gl: number
+          alerte_brix_hors_norme?: boolean | null
+          alerte_ea_faible?: boolean | null
+          alerte_granulation_severe?: boolean | null
+          annee_analyse?: number | null
+          brix_degres: number
+          campagne_id: number
+          commentaires_validation?: string | null
+          created_at?: string | null
+          date_analyse: string
+          domaine_id: number
+          granulation_legere?: string | null
+          granulation_severe?: string | null
+          id?: number
+          is_offline_draft?: boolean | null
+          maturite_optimale?: boolean | null
+          mois_analyse?: number | null
+          moyenne_fermete_fruit_kg_cm2?: number | null
+          moyenne_fermete_peau_kg_cm2?: number | null
+          moyenne_pepins_par_fruit?: number | null
+          nb_fruits_avec_pepins?: number | null
+          nb_fruits_echantillon?: number
+          nb_pepins_echantillon_total?: number | null
+          observations?: string | null
+          pct_jus?: number | null
+          photo_fruits_coupes_url?: string | null
+          photo_legende?: string | null
+          poids_jus_g?: number | null
+          porte_greffe_id: number
+          ratio_ea?: number | null
+          statut_validation?: string | null
+          technicien_nom: string
+          updated_at?: string | null
+          user_id: string
+          variete_id: number
+          volume_jus_ml?: number | null
+          volume_naoh_ml?: number | null
+        }
+        Update: {
+          acidite_gl?: number
+          alerte_brix_hors_norme?: boolean | null
+          alerte_ea_faible?: boolean | null
+          alerte_granulation_severe?: boolean | null
+          annee_analyse?: number | null
+          brix_degres?: number
+          campagne_id?: number
+          commentaires_validation?: string | null
+          created_at?: string | null
+          date_analyse?: string
+          domaine_id?: number
+          granulation_legere?: string | null
+          granulation_severe?: string | null
+          id?: number
+          is_offline_draft?: boolean | null
+          maturite_optimale?: boolean | null
+          mois_analyse?: number | null
+          moyenne_fermete_fruit_kg_cm2?: number | null
+          moyenne_fermete_peau_kg_cm2?: number | null
+          moyenne_pepins_par_fruit?: number | null
+          nb_fruits_avec_pepins?: number | null
+          nb_fruits_echantillon?: number
+          nb_pepins_echantillon_total?: number | null
+          observations?: string | null
+          pct_jus?: number | null
+          photo_fruits_coupes_url?: string | null
+          photo_legende?: string | null
+          poids_jus_g?: number | null
+          porte_greffe_id?: number
+          ratio_ea?: number | null
+          statut_validation?: string | null
+          technicien_nom?: string
+          updated_at?: string | null
+          user_id?: string
+          variete_id?: number
+          volume_jus_ml?: number | null
+          volume_naoh_ml?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualite_interne_campagne_id_fkey"
+            columns: ["campagne_id"]
+            isOneToOne: false
+            referencedRelation: "campagnes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualite_interne_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualite_interne_porte_greffe_id_fkey"
+            columns: ["porte_greffe_id"]
+            isOneToOne: false
+            referencedRelation: "porte_greffes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualite_interne_variete_id_fkey"
+            columns: ["variete_id"]
+            isOneToOne: false
+            referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       types_varietes: {
         Row: {
           couleur_badge: string | null
