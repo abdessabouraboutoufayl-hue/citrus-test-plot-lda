@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -26,6 +26,7 @@ export function AppSidebar() {
 
   if (userInfo.role === "responsable_central") {
     navItems.push({ title: "Validation", url: "/validation", icon: CheckSquare });
+    navItems.push({ title: "Administration", url: "/admin", icon: Settings });
   }
 
   return (

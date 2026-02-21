@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      domaine_varietes: {
+        Row: {
+          created_at: string | null
+          domaine_id: number
+          id: number
+          variete_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          domaine_id: number
+          id?: number
+          variete_id: number
+        }
+        Update: {
+          created_at?: string | null
+          domaine_id?: number
+          id?: number
+          variete_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "domaine_varietes_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "domaine_varietes_variete_id_fkey"
+            columns: ["variete_id"]
+            isOneToOne: false
+            referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       domaines: {
         Row: {
           code: string

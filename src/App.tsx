@@ -11,6 +11,7 @@ import ProductionWizard from "@/pages/ProductionWizard";
 import Validation from "@/pages/Validation";
 import Profile from "@/pages/Profile";
 import NotFound from "@/pages/NotFound";
+import Administration from "@/pages/Administration";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/production/new" element={<ProductionWizard />} />
         <Route path="/production/dashboard" element={<Dashboard />} />
         <Route path="/validation" element={<Validation />} />
+        <Route path="/admin" element={<Administration />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<NotFound />} />
