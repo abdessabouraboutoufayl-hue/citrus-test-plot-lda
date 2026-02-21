@@ -1,0 +1,464 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
+  public: {
+    Tables: {
+      campagnes: {
+        Row: {
+          code_campagne: string
+          created_at: string | null
+          date_debut: string
+          date_fin: string
+          id: number
+          statut: string | null
+        }
+        Insert: {
+          code_campagne: string
+          created_at?: string | null
+          date_debut: string
+          date_fin: string
+          id?: number
+          statut?: string | null
+        }
+        Update: {
+          code_campagne?: string
+          created_at?: string | null
+          date_debut?: string
+          date_fin?: string
+          id?: number
+          statut?: string | null
+        }
+        Relationships: []
+      }
+      domaines: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: number
+          nom: string
+          region: string
+          responsable_nom: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: number
+          nom: string
+          region: string
+          responsable_nom?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: number
+          nom?: string
+          region?: string
+          responsable_nom?: string | null
+        }
+        Relationships: []
+      }
+      porte_greffes: {
+        Row: {
+          code_pg: string
+          created_at: string | null
+          id: number
+          nom_pg: string
+        }
+        Insert: {
+          code_pg: string
+          created_at?: string | null
+          id?: number
+          nom_pg: string
+        }
+        Update: {
+          code_pg?: string
+          created_at?: string | null
+          id?: number
+          nom_pg?: string
+        }
+        Relationships: []
+      }
+      production: {
+        Row: {
+          calibre_moyen_mm: number | null
+          campagne_id: number
+          code_arbre: string | null
+          commentaires_validation: string | null
+          created_at: string | null
+          date_recolte: string
+          domaine_id: number
+          id: number
+          is_offline_draft: boolean | null
+          ligne_numero: number
+          nb_fruits_total: number
+          observations: string | null
+          photo_legende: string | null
+          photo_url: string | null
+          poids_moyen_fruit_g: number | null
+          poids_total_kg: number
+          porte_greffe_id: number
+          position_ligne: number
+          qualite_globale: string | null
+          recoltant_nom: string | null
+          statut_validation: string | null
+          taux_declassement_pct: number | null
+          updated_at: string | null
+          user_id: string
+          variete_id: number
+        }
+        Insert: {
+          calibre_moyen_mm?: number | null
+          campagne_id: number
+          code_arbre?: string | null
+          commentaires_validation?: string | null
+          created_at?: string | null
+          date_recolte: string
+          domaine_id: number
+          id?: number
+          is_offline_draft?: boolean | null
+          ligne_numero: number
+          nb_fruits_total: number
+          observations?: string | null
+          photo_legende?: string | null
+          photo_url?: string | null
+          poids_moyen_fruit_g?: number | null
+          poids_total_kg: number
+          porte_greffe_id: number
+          position_ligne: number
+          qualite_globale?: string | null
+          recoltant_nom?: string | null
+          statut_validation?: string | null
+          taux_declassement_pct?: number | null
+          updated_at?: string | null
+          user_id: string
+          variete_id: number
+        }
+        Update: {
+          calibre_moyen_mm?: number | null
+          campagne_id?: number
+          code_arbre?: string | null
+          commentaires_validation?: string | null
+          created_at?: string | null
+          date_recolte?: string
+          domaine_id?: number
+          id?: number
+          is_offline_draft?: boolean | null
+          ligne_numero?: number
+          nb_fruits_total?: number
+          observations?: string | null
+          photo_legende?: string | null
+          photo_url?: string | null
+          poids_moyen_fruit_g?: number | null
+          poids_total_kg?: number
+          porte_greffe_id?: number
+          position_ligne?: number
+          qualite_globale?: string | null
+          recoltant_nom?: string | null
+          statut_validation?: string | null
+          taux_declassement_pct?: number | null
+          updated_at?: string | null
+          user_id?: string
+          variete_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_campagne_id_fkey"
+            columns: ["campagne_id"]
+            isOneToOne: false
+            referencedRelation: "campagnes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_porte_greffe_id_fkey"
+            columns: ["porte_greffe_id"]
+            isOneToOne: false
+            referencedRelation: "porte_greffes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_variete_id_fkey"
+            columns: ["variete_id"]
+            isOneToOne: false
+            referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          id: string
+          nom_complet: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          id: string
+          nom_complet?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          nom_complet?: string | null
+        }
+        Relationships: []
+      }
+      types_varietes: {
+        Row: {
+          couleur_badge: string | null
+          created_at: string | null
+          id: number
+          type_code: string
+          type_nom: string
+        }
+        Insert: {
+          couleur_badge?: string | null
+          created_at?: string | null
+          id?: number
+          type_code: string
+          type_nom: string
+        }
+        Update: {
+          couleur_badge?: string | null
+          created_at?: string | null
+          id?: number
+          type_code?: string
+          type_nom?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          domaine_id: number | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          domaine_id?: number | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          domaine_id?: number | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      varietes: {
+        Row: {
+          code_variete: string
+          created_at: string | null
+          id: number
+          nom_commercial: string | null
+          statut: string | null
+          type_id: number | null
+        }
+        Insert: {
+          code_variete: string
+          created_at?: string | null
+          id?: number
+          nom_commercial?: string | null
+          statut?: string | null
+          type_id?: number | null
+        }
+        Update: {
+          code_variete?: string
+          created_at?: string | null
+          id?: number
+          nom_commercial?: string | null
+          statut?: string | null
+          type_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "varietes_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "types_varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      get_user_domaine_id: { Args: { _user_id: string }; Returns: number }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+    }
+    Enums: {
+      app_role: "responsable_domaine" | "responsable_central" | "direction"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      app_role: ["responsable_domaine", "responsable_central", "direction"],
+    },
+  },
+} as const
