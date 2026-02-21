@@ -1,0 +1,11 @@
+{
+  "name": "R&D Variétal - Production Agrumes",
+  "short_name": "R&D Variétal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2E7D32",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }
+  ]
+}
