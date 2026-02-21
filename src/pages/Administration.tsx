@@ -13,13 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, MapPin, Grape, Users, Link2 } from "lucide-react";
+import { PlusCircle, Trash2, MapPin, Grape, Users, Link2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── Domaines Tab ───────────────────────────────────────────────
 function DomainesTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ code: "", nom: "", region: "", responsable_nom: "" });
 
   const { data: domaines = [], isLoading } = useQuery({
@@ -50,6 +52,26 @@ function DomainesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editId) return;
+      const { error } = await supabase.from("domaines").update({
+        code: form.code.trim(),
+        nom: form.nom.trim(),
+        region: form.region.trim(),
+        responsable_nom: form.responsable_nom.trim() || null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
+      toast.success("Domaine modifié");
+      setEditOpen(false);
+      setEditId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase.from("domaines").delete().eq("id", id);
@@ -61,6 +83,12 @@ function DomainesTab() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const openEdit = (d: any) => {
+    setEditId(d.id);
+    setForm({ code: d.code, nom: d.nom, region: d.region, responsable_nom: d.responsable_nom || "" });
+    setEditOpen(true);
+  };
 
   return (
     <Card>
@@ -106,7 +134,10 @@ function DomainesTab() {
                 <TableCell className="font-medium">{d.nom}</TableCell>
                 <TableCell>{d.region}</TableCell>
                 <TableCell>{d.responsable_nom || "—"}</TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(d)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(d.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -116,6 +147,22 @@ function DomainesTab() {
           </TableBody>
         </Table>
       </CardContent>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Modifier le domaine</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} /></div>
+            <div><Label>Nom</Label><Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} /></div>
+            <div><Label>Région</Label><Input value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} /></div>
+            <div><Label>Responsable</Label><Input value={form.responsable_nom} onChange={e => setForm({ ...form, responsable_nom: e.target.value })} /></div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => updateMutation.mutate()} disabled={!form.code || !form.nom || !form.region || updateMutation.isPending}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -124,6 +171,8 @@ function DomainesTab() {
 function VarietesTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ code_variete: "", nom_commercial: "", type_id: "" });
 
   const { data: varietes = [], isLoading } = useQuery({
@@ -162,6 +211,25 @@ function VarietesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editId) return;
+      const { error } = await supabase.from("varietes").update({
+        code_variete: form.code_variete.trim(),
+        nom_commercial: form.nom_commercial.trim() || null,
+        type_id: form.type_id ? Number(form.type_id) : null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-varietes"] });
+      toast.success("Variété modifiée");
+      setEditOpen(false);
+      setEditId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase.from("varietes").delete().eq("id", id);
@@ -173,6 +241,12 @@ function VarietesTab() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const openEdit = (v: any) => {
+    setEditId(v.id);
+    setForm({ code_variete: v.code_variete, nom_commercial: v.nom_commercial || "", type_id: v.type_id ? String(v.type_id) : "" });
+    setEditOpen(true);
+  };
 
   return (
     <Card>
@@ -223,7 +297,10 @@ function VarietesTab() {
                 <TableCell><Badge variant="outline">{v.code_variete}</Badge></TableCell>
                 <TableCell className="font-medium">{v.nom_commercial || "—"}</TableCell>
                 <TableCell>{(v.types_varietes as any)?.type_nom || "—"}</TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(v.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -233,6 +310,29 @@ function VarietesTab() {
           </TableBody>
         </Table>
       </CardContent>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Modifier la variété</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Code variété</Label><Input value={form.code_variete} onChange={e => setForm({ ...form, code_variete: e.target.value })} /></div>
+            <div><Label>Nom commercial</Label><Input value={form.nom_commercial} onChange={e => setForm({ ...form, nom_commercial: e.target.value })} /></div>
+            <div>
+              <Label>Type</Label>
+              <Select value={form.type_id} onValueChange={v => setForm({ ...form, type_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
+                <SelectContent>
+                  {types.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => updateMutation.mutate()} disabled={!form.code_variete || updateMutation.isPending}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -241,6 +341,8 @@ function VarietesTab() {
 function UtilisateursTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ user_id: "", role: "", domaine_id: "" });
 
   const { data: roles = [], isLoading } = useQuery({
@@ -291,6 +393,24 @@ function UtilisateursTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editId) return;
+      const { error } = await supabase.from("user_roles").update({
+        role: form.role as any,
+        domaine_id: form.domaine_id ? Number(form.domaine_id) : null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
+      toast.success("Rôle modifié");
+      setEditOpen(false);
+      setEditId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("user_roles").delete().eq("id", id);
@@ -307,6 +427,12 @@ function UtilisateursTab() {
     responsable_domaine: "Resp. Domaine",
     responsable_central: "Resp. Central",
     direction: "Direction",
+  };
+
+  const openEdit = (r: any) => {
+    setEditId(r.id);
+    setForm({ user_id: r.user_id, role: r.role, domaine_id: r.domaine_id ? String(r.domaine_id) : "" });
+    setEditOpen(true);
   };
 
   return (
@@ -380,7 +506,10 @@ function UtilisateursTab() {
                 <TableCell>{(r.profiles as any)?.nom_complet || "—"}</TableCell>
                 <TableCell><Badge>{roleLabels[r.role] || r.role}</Badge></TableCell>
                 <TableCell>{(r.domaines as any)?.nom || "—"}</TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(r)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(r.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -390,6 +519,40 @@ function UtilisateursTab() {
           </TableBody>
         </Table>
       </CardContent>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Modifier le rôle</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Rôle</Label>
+              <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
+                  <SelectItem value="responsable_central">Responsable Central</SelectItem>
+                  <SelectItem value="direction">Direction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.role === "responsable_domaine" && (
+              <div>
+                <Label>Domaine</Label>
+                <Select value={form.domaine_id} onValueChange={v => setForm({ ...form, domaine_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
+                  <SelectContent>
+                    {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => updateMutation.mutate()} disabled={!form.role || updateMutation.isPending}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -398,6 +561,9 @@ function UtilisateursTab() {
 function DomaineVarietesTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNbArbres, setEditNbArbres] = useState("5");
   const [selectedDomaine, setSelectedDomaine] = useState("");
   const [selectedPorteGreffe, setSelectedPorteGreffe] = useState("");
   const [selectedType, setSelectedType] = useState("");
@@ -484,6 +650,23 @@ function DomaineVarietesTab() {
       setSelectedType("");
       setSelectedVarietes([]);
       setNbArbres("5");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editId) return;
+      const { error } = await supabase.from("domaine_varietes").update({
+        nb_arbres: Number(editNbArbres) || 5,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-domaine-varietes"] });
+      toast.success("Association modifiée");
+      setEditOpen(false);
+      setEditId(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -615,7 +798,10 @@ function DomaineVarietesTab() {
                 <TableCell><Badge variant="outline">{(l.varietes as any)?.code_variete}</Badge></TableCell>
                 <TableCell>{(l.porte_greffes as any)?.code_pg || "—"}</TableCell>
                 <TableCell>{l.nb_arbres}</TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => { setEditId(l.id); setEditNbArbres(String(l.nb_arbres)); setEditOpen(true); }}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(l.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -625,6 +811,22 @@ function DomaineVarietesTab() {
           </TableBody>
         </Table>
       </CardContent>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Modifier l'association</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Nombre d'arbres</Label>
+              <Input type="number" min={1} value={editNbArbres} onChange={e => setEditNbArbres(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
