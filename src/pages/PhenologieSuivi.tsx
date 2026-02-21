@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { toast } from "sonner";
@@ -36,13 +37,24 @@ function getStadeDateField(key: string): string {
   return `stade_${key}_date_debut`;
 }
 
+function getStadeObsField(key: string): string {
+  if (key === "debut_maturite") return "stade_debut_maturite_observations";
+  if (key === "maturite_recolte") return "stade_maturite_recolte_observations";
+  return `stade_${key}_observations`;
+}
+
 function getCurrentStade(record: any): string {
-  // Return the latest completed stade
   for (let i = STADES.length - 1; i >= 0; i--) {
     const dateField = getStadeDateField(STADES[i].key);
     if (record?.[dateField]) return STADES[i].key;
   }
   return "";
+}
+
+interface RowEdit {
+  stade?: string;
+  date?: string;
+  obs?: string;
 }
 
 export default function PhenologieSuivi() {
@@ -51,8 +63,7 @@ export default function PhenologieSuivi() {
 
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
-  // Track stade changes per variété: { [varieteId]: stadeKey }
-  const [stadeChanges, setStadeChanges] = useState<Record<string, string>>({});
+  const [rowEdits, setRowEdits] = useState<Record<string, RowEdit>>({});
 
   const isCentral = userInfo.role === "responsable_central";
 
@@ -80,7 +91,6 @@ export default function PhenologieSuivi() {
     },
   });
 
-  // Get domaine_varietes for the selected domaine to know which varieties belong to it
   const { data: domaineVarietes } = useQuery({
     queryKey: ["domaine-varietes", selectedDomaine],
     queryFn: async () => {
@@ -93,7 +103,6 @@ export default function PhenologieSuivi() {
     enabled: !!selectedDomaine,
   });
 
-  // Fetch existing phenologie records for selected campagne + domaine
   const { data: phenoRecords } = useQuery({
     queryKey: ["phenologie-list", selectedCampagne, selectedDomaine],
     queryFn: async () => {
@@ -109,16 +118,20 @@ export default function PhenologieSuivi() {
 
   const selectedDomaineObj = domaines?.find((d) => d.id.toString() === selectedDomaine);
 
-  // Filter varieties to those belonging to this domaine
   const filteredVarietes = varietes?.filter((v) =>
     domaineVarietes?.some((dv) => dv.variete_id === v.id)
   ) || [];
 
-  // Build rows: one per variety of the domaine
+  const today = new Date().toISOString().split("T")[0];
+
   const tableRows = filteredVarietes.map((v) => {
     const phenoRecord = phenoRecords?.find((r) => r.variete_id === v.id);
     const currentStade = getCurrentStade(phenoRecord);
-    const pendingStade = stadeChanges[v.id.toString()];
+    const edit = rowEdits[v.id.toString()];
+    const selectedStade = edit?.stade ?? currentStade;
+    // Get existing date/obs for the selected stade from DB
+    const existingDate = selectedStade && phenoRecord ? (phenoRecord as any)[getStadeDateField(selectedStade)] || "" : "";
+    const existingObs = selectedStade && phenoRecord ? (phenoRecord as any)[getStadeObsField(selectedStade)] || "" : "";
     return {
       varieteId: v.id,
       domaineNom: selectedDomaineObj?.nom || "-",
@@ -127,39 +140,55 @@ export default function PhenologieSuivi() {
       typeCouleur: v.types_varietes?.couleur_badge || "#888",
       codeVariete: v.code_variete,
       currentStade,
-      selectedStade: pendingStade ?? currentStade,
+      selectedStade,
+      stadeDate: edit?.date ?? existingDate,
+      stadeObs: edit?.obs ?? existingObs,
       phenoRecord,
     };
   });
 
-  const handleStadeChange = useCallback((varieteId: string, stadeKey: string) => {
-    setStadeChanges((prev) => ({ ...prev, [varieteId]: stadeKey }));
+  const updateRowEdit = useCallback((varieteId: string, field: keyof RowEdit, value: string) => {
+    setRowEdits((prev) => ({
+      ...prev,
+      [varieteId]: { ...prev[varieteId], [field]: value },
+    }));
   }, []);
 
-  const hasChanges = Object.keys(stadeChanges).length > 0;
+  const handleStadeChange = useCallback((varieteId: string, stadeKey: string) => {
+    // When stade changes, reset date to today and obs to empty for new stade
+    setRowEdits((prev) => ({
+      ...prev,
+      [varieteId]: { stade: stadeKey, date: today, obs: "" },
+    }));
+  }, [today]);
+
+  const hasChanges = Object.keys(rowEdits).length > 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!session?.user?.id) throw new Error("Non connecté");
       if (!selectedCampagne || !selectedDomaine) throw new Error("Sélectionnez campagne et domaine");
 
-      const today = new Date().toISOString().split("T")[0];
-
-      for (const [varieteId, stadeKey] of Object.entries(stadeChanges)) {
+      for (const [varieteId, edit] of Object.entries(rowEdits)) {
         const row = tableRows.find((r) => r.varieteId.toString() === varieteId);
         if (!row) continue;
-        // Skip if stade hasn't actually changed
-        if (row.currentStade === stadeKey) continue;
+
+        const stadeKey = edit.stade ?? row.currentStade;
+        if (!stadeKey) continue;
 
         const dateField = getStadeDateField(stadeKey);
+        const obsField = getStadeObsField(stadeKey);
+        const dateVal = edit.date ?? today;
+
         const payload: any = {
           domaine_id: Number(selectedDomaine),
           campagne_id: Number(selectedCampagne),
           variete_id: Number(varieteId),
-          date_observation: today,
+          date_observation: dateVal,
           observateur_nom: userInfo.nomComplet || "Inconnu",
           user_id: session.user.id,
-          [dateField]: today,
+          [dateField]: dateVal,
+          [obsField]: edit.obs || null,
         };
 
         if (row.phenoRecord) {
@@ -167,9 +196,9 @@ export default function PhenologieSuivi() {
           if (error) throw error;
           await supabase.from("phenologie_observations").insert({
             phenologie_id: row.phenoRecord.id,
-            date_observation: today,
+            date_observation: dateVal,
             stades_observes: [STADES.find((s) => s.key === stadeKey)?.label],
-            notes: null,
+            notes: edit.obs || null,
             observateur_nom: userInfo.nomComplet || "Inconnu",
           });
         } else {
@@ -177,16 +206,16 @@ export default function PhenologieSuivi() {
           if (error) throw error;
           await supabase.from("phenologie_observations").insert({
             phenologie_id: data.id,
-            date_observation: today,
+            date_observation: dateVal,
             stades_observes: [STADES.find((s) => s.key === stadeKey)?.label],
-            notes: "Première observation",
+            notes: edit.obs || "Première observation",
             observateur_nom: userInfo.nomComplet || "Inconnu",
           });
         }
       }
     },
     onSuccess: () => {
-      setStadeChanges({});
+      setRowEdits({});
       queryClient.invalidateQueries({ queryKey: ["phenologie-list"] });
       toast.success("Observations enregistrées");
     },
@@ -202,7 +231,6 @@ export default function PhenologieSuivi() {
         </p>
       </div>
 
-      {/* Filtres */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <div>
           <Label className="text-xs mb-1 block">Campagne</Label>
@@ -230,7 +258,6 @@ export default function PhenologieSuivi() {
         </div>
       </div>
 
-      {/* Tableau */}
       {selectedCampagne && selectedDomaine && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -240,7 +267,7 @@ export default function PhenologieSuivi() {
             {hasChanges && (
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm">
                 <Save className="h-4 w-4 mr-2" />
-                Enregistrer {Object.keys(stadeChanges).length} modification(s)
+                Enregistrer {Object.keys(rowEdits).length} modification(s)
               </Button>
             )}
           </CardHeader>
@@ -250,57 +277,80 @@ export default function PhenologieSuivi() {
                 Aucune variété associée à cette ferme.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[180px]">Domaine</TableHead>
-                    <TableHead className="w-[140px]">Type variété</TableHead>
-                    <TableHead className="w-[120px]">Code</TableHead>
-                    <TableHead>Stade phénologique</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableRows.map((row) => {
-                    const changed = stadeChanges[row.varieteId.toString()] !== undefined
-                      && stadeChanges[row.varieteId.toString()] !== row.currentStade;
-                    return (
-                      <TableRow key={row.varieteId} className={changed ? "bg-primary/5" : ""}>
-                        <TableCell className="text-sm">{row.domaineNom}</TableCell>
-                        <TableCell>
-                          <span
-                            className="inline-block px-2 py-0.5 rounded text-xs text-white font-medium"
-                            style={{ backgroundColor: row.typeCouleur }}
-                          >
-                            {row.typeCode}
-                          </span>
-                          <span className="ml-2 text-sm text-muted-foreground">{row.typeVariete}</span>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{row.codeVariete}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={row.selectedStade || "none"}
-                            onValueChange={(val) =>
-                              handleStadeChange(row.varieteId.toString(), val === "none" ? "" : val)
-                            }
-                          >
-                            <SelectTrigger className="w-[220px] h-9">
-                              <SelectValue placeholder="Aucun stade" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">— Aucun stade —</SelectItem>
-                              {STADES.map((s) => (
-                                <SelectItem key={s.key} value={s.key}>
-                                  {s.num}. {s.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[150px]">Domaine</TableHead>
+                      <TableHead className="w-[130px]">Type variété</TableHead>
+                      <TableHead className="w-[100px]">Code</TableHead>
+                      <TableHead className="w-[200px]">Stade phénologique</TableHead>
+                      <TableHead className="w-[150px]">Date du stade</TableHead>
+                      <TableHead className="min-w-[180px]">Observations</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tableRows.map((row) => {
+                      const hasEdit = rowEdits[row.varieteId.toString()] !== undefined;
+                      const stadeChanged = hasEdit && rowEdits[row.varieteId.toString()]?.stade !== undefined
+                        && rowEdits[row.varieteId.toString()]?.stade !== row.currentStade;
+                      return (
+                        <TableRow key={row.varieteId} className={hasEdit ? "bg-primary/5" : ""}>
+                          <TableCell className="text-sm">{row.domaineNom}</TableCell>
+                          <TableCell>
+                            <span
+                              className="inline-block px-2 py-0.5 rounded text-xs text-white font-medium"
+                              style={{ backgroundColor: row.typeCouleur }}
+                            >
+                              {row.typeCode}
+                            </span>
+                            <span className="ml-1.5 text-xs text-muted-foreground">{row.typeVariete}</span>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{row.codeVariete}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={row.selectedStade || "none"}
+                              onValueChange={(val) =>
+                                handleStadeChange(row.varieteId.toString(), val === "none" ? "" : val)
+                              }
+                            >
+                              <SelectTrigger className="w-full h-9 text-xs">
+                                <SelectValue placeholder="Aucun stade" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">— Aucun stade —</SelectItem>
+                                {STADES.map((s) => (
+                                  <SelectItem key={s.key} value={s.key}>
+                                    {s.num}. {s.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="date"
+                              className="h-9 text-xs w-full"
+                              value={row.stadeDate}
+                              onChange={(e) => updateRowEdit(row.varieteId.toString(), "date", e.target.value)}
+                              disabled={!row.selectedStade}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-9 text-xs w-full"
+                              placeholder="Notes..."
+                              value={row.stadeObs}
+                              onChange={(e) => updateRowEdit(row.varieteId.toString(), "obs", e.target.value)}
+                              disabled={!row.selectedStade}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
