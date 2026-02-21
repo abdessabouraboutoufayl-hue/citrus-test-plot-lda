@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2, MapPin, Grape, Users, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -397,7 +398,8 @@ function UtilisateursTab() {
 function DomaineVarietesTab() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ domaine_id: "", variete_id: "" });
+  const [selectedDomaine, setSelectedDomaine] = useState("");
+  const [selectedVarietes, setSelectedVarietes] = useState<string[]>([]);
 
   const { data: links = [], isLoading } = useQuery({
     queryKey: ["admin-domaine-varietes"],
@@ -429,19 +431,32 @@ function DomaineVarietesTab() {
     },
   });
 
+  // Get already linked variete IDs for selected domaine
+  const linkedVarieteIds = links
+    .filter(l => String(l.domaine_id) === selectedDomaine)
+    .map(l => String(l.variete_id));
+
+  const toggleVariete = (id: string) => {
+    setSelectedVarietes(prev =>
+      prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+    );
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("domaine_varietes").insert({
-        domaine_id: Number(form.domaine_id),
-        variete_id: Number(form.variete_id),
-      });
+      const rows = selectedVarietes.map(vid => ({
+        domaine_id: Number(selectedDomaine),
+        variete_id: Number(vid),
+      }));
+      const { error } = await supabase.from("domaine_varietes").insert(rows);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaine-varietes"] });
-      toast.success("Variété associée au domaine");
+      toast.success(`${selectedVarietes.length} variété(s) associée(s)`);
       setOpen(false);
-      setForm({ domaine_id: "", variete_id: "" });
+      setSelectedDomaine("");
+      setSelectedVarietes([]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -467,30 +482,45 @@ function DomaineVarietesTab() {
             <Button size="sm"><PlusCircle className="h-4 w-4 mr-1" /> Associer</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Associer une variété à un domaine</DialogTitle></DialogHeader>
-            <div className="space-y-3">
+            <DialogHeader><DialogTitle>Associer des variétés à un domaine</DialogTitle></DialogHeader>
+            <div className="space-y-4">
               <div>
                 <Label>Domaine</Label>
-                <Select value={form.domaine_id} onValueChange={v => setForm({ ...form, domaine_id: v })}>
+                <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedVarietes([]); }}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
                   <SelectContent>
                     {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Variété</Label>
-                <Select value={form.variete_id} onValueChange={v => setForm({ ...form, variete_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner une variété" /></SelectTrigger>
-                  <SelectContent>
-                    {varietes.map(v => <SelectItem key={v.id} value={String(v.id)}>{v.code_variete} — {v.nom_commercial || ""}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {selectedDomaine && (
+                <div>
+                  <Label className="mb-2 block">Variétés</Label>
+                  <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-3">
+                    {varietes
+                      .filter(v => !linkedVarieteIds.includes(String(v.id)))
+                      .map(v => (
+                        <div key={v.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`var-${v.id}`}
+                            checked={selectedVarietes.includes(String(v.id))}
+                            onCheckedChange={() => toggleVariete(String(v.id))}
+                          />
+                          <label htmlFor={`var-${v.id}`} className="text-sm cursor-pointer">
+                            {v.code_variete} — {v.nom_commercial || ""}
+                          </label>
+                        </div>
+                      ))}
+                    {varietes.filter(v => !linkedVarieteIds.includes(String(v.id))).length === 0 && (
+                      <p className="text-sm text-muted-foreground">Toutes les variétés sont déjà associées.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={!form.domaine_id || !form.variete_id || createMutation.isPending}>
-                Associer
+              <Button onClick={() => createMutation.mutate()} disabled={!selectedDomaine || selectedVarietes.length === 0 || createMutation.isPending}>
+                Associer ({selectedVarietes.length})
               </Button>
             </DialogFooter>
           </DialogContent>
