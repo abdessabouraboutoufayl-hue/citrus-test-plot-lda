@@ -192,6 +192,7 @@ function DomainesTab() {
             } as any).eq("id", drawDomaine.id);
             if (error) { toast.error(error.message); return; }
             queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
+            queryClient.invalidateQueries({ queryKey: ["gps-domaines"] });
             toast.success(`Superficie enregistrée : ${superficieHa} ha`);
           }}
         />
