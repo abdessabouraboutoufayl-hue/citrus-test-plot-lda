@@ -400,6 +400,7 @@ function DomaineVarietesTab() {
   const [open, setOpen] = useState(false);
   const [selectedDomaine, setSelectedDomaine] = useState("");
   const [selectedPorteGreffe, setSelectedPorteGreffe] = useState("");
+  const [selectedType, setSelectedType] = useState("");
   const [selectedVarietes, setSelectedVarietes] = useState<string[]>([]);
   const [nbArbres, setNbArbres] = useState("5");
   const [filterDomaine, setFilterDomaine] = useState("");
@@ -428,7 +429,16 @@ function DomaineVarietesTab() {
   const { data: varietes = [] } = useQuery({
     queryKey: ["admin-varietes-simple"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("varietes").select("id, code_variete, nom_commercial").order("code_variete");
+      const { data, error } = await supabase.from("varietes").select("id, code_variete, nom_commercial, type_id").order("code_variete");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: typesVarietes = [] } = useQuery({
+    queryKey: ["types-varietes"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("types_varietes").select("*").order("type_nom");
       if (error) throw error;
       return data;
     },
@@ -471,6 +481,7 @@ function DomaineVarietesTab() {
       setOpen(false);
       setSelectedDomaine("");
       setSelectedPorteGreffe("");
+      setSelectedType("");
       setSelectedVarietes([]);
       setNbArbres("5");
     },
@@ -531,15 +542,24 @@ function DomaineVarietesTab() {
                   </Select>
                 </div>
                 <div>
+                  <Label>Type de variété</Label>
+                  <Select value={selectedType} onValueChange={v => { setSelectedType(v); setSelectedVarietes([]); }}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
+                    <SelectContent>
+                      {typesVarietes.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label>Nombre d'arbres</Label>
                   <Input type="number" min={1} value={nbArbres} onChange={e => setNbArbres(e.target.value)} />
                 </div>
-                {selectedDomaine && selectedPorteGreffe && (
+                {selectedDomaine && selectedPorteGreffe && selectedType && (
                   <div>
-                    <Label className="mb-2 block">Variétés</Label>
+                    <Label className="mb-2 block">Codes variétés ({selectedType && typesVarietes.find(t => String(t.id) === selectedType)?.type_nom})</Label>
                     <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-3">
                       {varietes
-                        .filter(v => !linkedVarieteIds.includes(String(v.id)))
+                        .filter(v => String(v.type_id) === selectedType && !linkedVarieteIds.includes(String(v.id)))
                         .map(v => (
                           <div key={v.id} className="flex items-center gap-2">
                             <Checkbox
@@ -552,8 +572,8 @@ function DomaineVarietesTab() {
                             </label>
                           </div>
                         ))}
-                      {varietes.filter(v => !linkedVarieteIds.includes(String(v.id))).length === 0 && (
-                        <p className="text-sm text-muted-foreground">Toutes les variétés sont déjà associées.</p>
+                      {varietes.filter(v => String(v.type_id) === selectedType && !linkedVarieteIds.includes(String(v.id))).length === 0 && (
+                        <p className="text-sm text-muted-foreground">Toutes les variétés de ce type sont déjà associées.</p>
                       )}
                     </div>
                   </div>
