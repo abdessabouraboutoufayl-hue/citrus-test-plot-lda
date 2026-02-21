@@ -67,6 +67,7 @@ export default function PhenologieSuivi() {
   const [rowEdits, setRowEdits] = useState<Record<string, RowEdit>>({});
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [bulkDate, setBulkDate] = useState(new Date().toISOString().split("T")[0]);
+  const [bulkStade, setBulkStade] = useState("");
   const isCentral = userInfo.role === "responsable_central";
 
   const { data: campagnes } = useQuery({
@@ -194,6 +195,19 @@ export default function PhenologieSuivi() {
     toast.success(`Date ${bulkDate} appliquée à ${selectedRows.size} ligne(s)`);
   }, [selectedRows, bulkDate]);
 
+  const applyBulkStade = useCallback(() => {
+    if (selectedRows.size === 0 || !bulkStade) return;
+    setRowEdits((prev) => {
+      const next = { ...prev };
+      selectedRows.forEach((id) => {
+        next[id] = { ...next[id], stade: bulkStade, date: next[id]?.date || today };
+      });
+      return next;
+    });
+    const label = STADES.find((s) => s.key === bulkStade)?.label || bulkStade;
+    toast.success(`Stade "${label}" appliqué à ${selectedRows.size} ligne(s)`);
+  }, [selectedRows, bulkStade, today]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!session?.user?.id) throw new Error("Non connecté");
@@ -304,19 +318,38 @@ export default function PhenologieSuivi() {
           {/* Bulk date action bar */}
           {selectedRows.size > 0 && (
             <div className="px-4 pb-3 flex items-center gap-3 flex-wrap border-b">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm font-medium text-muted-foreground">
                 {selectedRows.size} ligne(s) sélectionnée(s)
               </span>
-              <Input
-                type="date"
-                className="h-9 text-xs w-[160px]"
-                value={bulkDate}
-                onChange={(e) => setBulkDate(e.target.value)}
-              />
-              <Button size="sm" variant="outline" onClick={applyBulkDate}>
-                <Copy className="h-4 w-4 mr-2" />
-                Appliquer la date
-              </Button>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  className="h-9 text-xs w-[160px]"
+                  value={bulkDate}
+                  onChange={(e) => setBulkDate(e.target.value)}
+                />
+                <Button size="sm" variant="outline" onClick={applyBulkDate}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Appliquer date
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={bulkStade || "none"} onValueChange={(v) => setBulkStade(v === "none" ? "" : v)}>
+                  <SelectTrigger className="h-9 w-[200px] text-xs">
+                    <SelectValue placeholder="Stade..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Choisir stade —</SelectItem>
+                    {STADES.map((s) => (
+                      <SelectItem key={s.key} value={s.key}>{s.num}. {s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={applyBulkStade} disabled={!bulkStade}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Appliquer stade
+                </Button>
+              </div>
             </div>
           )}
           <CardContent className="p-0">
