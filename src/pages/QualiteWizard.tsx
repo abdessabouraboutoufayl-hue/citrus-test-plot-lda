@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Save, Check, Camera, Upload, AlertTriangle, Info } from "lucide-react";
 
 const schema = z.object({
+  domaine_id: z.number({ required_error: "Domaine requis" }),
   campagne_id: z.number({ required_error: "Campagne requise" }),
   variete_id: z.number({ required_error: "Variété requise" }),
   porte_greffe_id: z.number({ required_error: "Porte-greffe requis" }),
@@ -90,7 +91,8 @@ export default function QualiteWizard() {
     queryFn: async () => { const { data } = await supabase.from("domaines").select("*"); return data || []; },
   });
 
-  const currentDomaine = domaines.find((d) => d.id === userInfo.domaineId);
+  const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || w.domaine_id));
+  const isCentral = userInfo.role === "responsable_central";
   const w = form.watch();
   const ratioEA = w.brix_degres && w.acidite_gl && w.acidite_gl !== 0 ? w.brix_degres / w.acidite_gl : null;
   const moyennePepins = w.nb_pepins_echantillon_total != null && w.nb_fruits_echantillon
@@ -108,7 +110,9 @@ export default function QualiteWizard() {
 
   const submitMutation = useMutation({
     mutationFn: async ({ data, status }: { data: FormData; status: string }) => {
-      if (!user || !userInfo.domaineId) throw new Error("Non authentifié");
+      if (!user) throw new Error("Non authentifié");
+      const domaineId = isCentral ? data.domaine_id : userInfo.domaineId;
+      if (!domaineId) throw new Error("Domaine requis");
 
       let photoUrl: string | null = null;
       if (photoFile) {
@@ -121,7 +125,7 @@ export default function QualiteWizard() {
       }
 
       const { error } = await supabase.from("qualite_interne").insert({
-        domaine_id: userInfo.domaineId!,
+        domaine_id: domaineId,
         campagne_id: data.campagne_id,
         variete_id: data.variete_id,
         porte_greffe_id: data.porte_greffe_id,
@@ -183,7 +187,18 @@ export default function QualiteWizard() {
             <Card>
               <CardHeader><CardTitle>Identification</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div><Label>Domaine</Label><Input value={currentDomaine?.nom || "Non assigné"} disabled /></div>
+                {isCentral ? (
+                  <FormField control={form.control} name="domaine_id" render={({ field }) => (
+                    <FormItem><FormLabel>Domaine</FormLabel>
+                      <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger></FormControl>
+                        <SelectContent>{domaines.map((d) => <SelectItem key={d.id} value={d.id.toString()}>{d.nom} ({d.code})</SelectItem>)}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                ) : (
+                  <div><Label>Domaine</Label><Input value={currentDomaine?.nom || "Non assigné"} disabled /></div>
+                )}
                 <FormField control={form.control} name="campagne_id" render={({ field }) => (
                   <FormItem><FormLabel>Campagne</FormLabel>
                     <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
