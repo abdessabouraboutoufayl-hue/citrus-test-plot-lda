@@ -13,8 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, MapPin, Grape, Users, Link2, Pencil } from "lucide-react";
+import { PlusCircle, Trash2, MapPin, Grape, Users, Link2, Pencil, PenTool } from "lucide-react";
 import { toast } from "sonner";
+import DrawSuperficieDialog from "@/components/DrawSuperficieDialog";
 
 // ─── Domaines Tab ───────────────────────────────────────────────
 function DomainesTab() {
@@ -23,6 +24,8 @@ function DomainesTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ code: "", nom: "", region: "", responsable_nom: "" });
+  const [drawOpen, setDrawOpen] = useState(false);
+  const [drawDomaine, setDrawDomaine] = useState<any>(null);
 
   const { data: domaines = [], isLoading } = useQuery({
     queryKey: ["admin-domaines"],
@@ -122,19 +125,30 @@ function DomainesTab() {
               <TableHead>Nom</TableHead>
               <TableHead>Région</TableHead>
               <TableHead>Responsable</TableHead>
+              <TableHead>Superficie</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
             ) : domaines.map((d) => (
               <TableRow key={d.id}>
                 <TableCell><Badge variant="outline">{d.code}</Badge></TableCell>
                 <TableCell className="font-medium">{d.nom}</TableCell>
                 <TableCell>{d.region}</TableCell>
                 <TableCell>{d.responsable_nom || "—"}</TableCell>
+                <TableCell>
+                  {(d as any).superficie_ha ? (
+                    <Badge variant="secondary">{(d as any).superficie_ha} ha</Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" title="Tracer la superficie" onClick={() => { setDrawDomaine(d); setDrawOpen(true); }}>
+                    <PenTool className="h-4 w-4 text-primary" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => openEdit(d)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -163,6 +177,25 @@ function DomainesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {drawDomaine && (
+        <DrawSuperficieDialog
+          open={drawOpen}
+          onOpenChange={(v) => { setDrawOpen(v); if (!v) setDrawDomaine(null); }}
+          domaineName={drawDomaine.nom}
+          latitude={drawDomaine.latitude}
+          longitude={drawDomaine.longitude}
+          existingGeoJSON={(drawDomaine as any).superficie_geojson}
+          onSave={async (geojson, superficieHa) => {
+            const { error } = await supabase.from("domaines").update({
+              superficie_geojson: geojson,
+              superficie_ha: superficieHa,
+            } as any).eq("id", drawDomaine.id);
+            if (error) { toast.error(error.message); return; }
+            queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
+            toast.success(`Superficie enregistrée : ${superficieHa} ha`);
+          }}
+        />
+      )}
     </Card>
   );
 }

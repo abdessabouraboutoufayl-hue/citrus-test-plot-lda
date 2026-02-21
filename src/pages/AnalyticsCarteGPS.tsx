@@ -22,6 +22,7 @@ export default function AnalyticsCarteGPS() {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const polygonsRef = useRef<L.GeoJSON[]>([]);
   const [colorMode, setColorMode] = useState<"production" | "qualite">("production");
   const [selectedDomaines, setSelectedDomaines] = useState<number[]>([]);
 
@@ -90,12 +91,28 @@ export default function AnalyticsCarteGPS() {
     });
   }, [domaines, selectedDomaines, productions, qualites, colorMode]);
 
-  // Update markers on map
+  // Update markers and polygons on map
   useEffect(() => {
     if (!mapRef.current) return;
-    // Remove old markers
+    // Remove old markers & polygons
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
+    polygonsRef.current.forEach(p => p.remove());
+    polygonsRef.current = [];
+
+    // Draw polygons for domaines with superficie_geojson
+    domaines.filter(d => selectedDomaines.includes(d.id)).forEach(d => {
+      const geojson = (d as any).superficie_geojson;
+      if (geojson) {
+        try {
+          const layer = L.geoJSON(geojson, {
+            style: { color: "#22C55E", weight: 2, fillOpacity: 0.15, fillColor: "#22C55E" },
+          });
+          layer.addTo(mapRef.current!);
+          polygonsRef.current.push(layer);
+        } catch (e) { /* skip invalid */ }
+      }
+    });
 
     markers.forEach(m => {
       const icon = L.divIcon({
@@ -120,9 +137,11 @@ export default function AnalyticsCarteGPS() {
 
     if (markers.length > 0) {
       const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng]));
+      // Extend bounds with polygon bounds
+      polygonsRef.current.forEach(p => bounds.extend(p.getBounds()));
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 10 });
     }
-  }, [markers]);
+  }, [markers, domaines, selectedDomaines]);
 
   const toggleDomaine = (id: number) => {
     setSelectedDomaines(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]);
