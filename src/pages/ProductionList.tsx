@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Download, Trash2 } from "lucide-react";
+import { PlusCircle, Search, Download, Upload, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { useRef } from "react";
 
 const statusColors: Record<string, string> = {
   Brouillon: "bg-muted text-muted-foreground",
@@ -25,6 +26,7 @@ export default function ProductionList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: productions = [], isLoading } = useQuery({
     queryKey: ["productions", userInfo.domaineId, statutFilter],
@@ -52,6 +54,18 @@ export default function ProductionList() {
       queryClient.invalidateQueries({ queryKey: ["productions"] });
       toast.success("Production supprimée");
     },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("production").update({ statut_validation: "Soumis" }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["productions"] });
+      toast.success("Production soumise pour validation");
+    },
+    onError: (err: any) => toast.error(err.message),
   });
 
   const filtered = productions.filter((p) => {
@@ -84,17 +98,39 @@ export default function ProductionList() {
     toast.success("Export Excel téléchargé");
   };
 
+  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
+        toast.info(`${jsonData.length} lignes lues. Import en cours de développement.`);
+      } catch {
+        toast.error("Erreur de lecture du fichier Excel");
+      }
+    };
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Productions</h1>
         <div className="flex gap-2">
+          <input type="file" ref={fileInputRef} accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
+          <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm">
+            <Upload className="h-4 w-4 mr-1" /> Import
+          </Button>
           <Button onClick={exportExcel} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-1" /> Export
           </Button>
           {userInfo.role !== "direction" && (
             <Button asChild size="sm">
-              <Link to="/production/new"><PlusCircle className="h-4 w-4 mr-1" /> Nouvelle</Link>
+              <Link to="/production/saisie-par-variete"><PlusCircle className="h-4 w-4 mr-1" /> Nouvelle</Link>
             </Button>
           )}
         </div>
@@ -157,11 +193,16 @@ export default function ProductionList() {
                       {p.statut_validation}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="flex gap-1">
                     {p.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
-                      <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre">
+                          <Send className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} title="Supprimer">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
                     )}
                   </TableCell>
                 </TableRow>
@@ -188,6 +229,16 @@ export default function ProductionList() {
                 <div><span className="text-muted-foreground">Fruits</span><br />{p.nb_fruits_total}</div>
                 <div><span className="text-muted-foreground">Qualité</span><br />{p.qualite_globale || "-"}</div>
               </div>
+              {p.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={() => submitMutation.mutate(p.id)}>
+                    <Send className="h-3.5 w-3.5 mr-1" /> Soumettre
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(p.id)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
