@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -18,7 +18,8 @@ export function AppSidebar() {
   const { userInfo, signOut } = useAuth();
 
   const productionItems = [
-    { title: "Nouvelle saisie", url: "/production/new", icon: PlusCircle },
+    { title: "Saisie par variété", url: "/production/saisie-par-variete", icon: TreePine },
+    { title: "Saisie unitaire", url: "/production/new", icon: PlusCircle },
     { title: "Liste production", url: "/production", icon: List },
     { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3 },
   ];
