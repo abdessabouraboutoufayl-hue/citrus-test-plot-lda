@@ -416,6 +416,8 @@ export type Database = {
       }
       production: {
         Row: {
+          arbre_inclus_calculs: boolean
+          arbre_statut: string
           calibre_moyen_mm: number | null
           campagne_id: number
           code_arbre: string | null
@@ -443,6 +445,8 @@ export type Database = {
           variete_id: number
         }
         Insert: {
+          arbre_inclus_calculs?: boolean
+          arbre_statut?: string
           calibre_moyen_mm?: number | null
           campagne_id: number
           code_arbre?: string | null
@@ -470,6 +474,8 @@ export type Database = {
           variete_id: number
         }
         Update: {
+          arbre_inclus_calculs?: boolean
+          arbre_statut?: string
           calibre_moyen_mm?: number | null
           campagne_id?: number
           code_arbre?: string | null
