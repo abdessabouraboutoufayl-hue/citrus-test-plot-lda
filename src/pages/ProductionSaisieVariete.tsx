@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -223,6 +223,22 @@ export default function ProductionSaisieVariete() {
 
   const selectedVariete = varietes.find(v => v.id === varieteId);
 
+  // Keyboard navigation between cells
+  const tableRef = useRef<HTMLDivElement>(null);
+  const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, colIdx: number) => {
+    const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+    if (!arrowKeys.includes(e.key)) return;
+    e.preventDefault();
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (e.key === "ArrowDown") nextRow = rowIdx + 1;
+    else if (e.key === "ArrowUp") nextRow = rowIdx - 1;
+    else if (e.key === "ArrowRight") nextCol = colIdx + 1;
+    else if (e.key === "ArrowLeft") nextCol = colIdx - 1;
+    const next = tableRef.current?.querySelector<HTMLInputElement>(`[data-row="${nextRow}"][data-col="${nextCol}"]`);
+    if (next) { next.focus(); next.select(); }
+  }, []);
+
   // Validation
   const validationErrors = useMemo(() => {
     const errors: string[] = [];
@@ -410,7 +426,7 @@ export default function ProductionSaisieVariete() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="p-0 overflow-x-auto" ref={tableRef}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -427,7 +443,7 @@ export default function ProductionSaisieVariete() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(row => {
+              {rows.map((row, rowIdx) => {
                 const isNormal = row.statut === "Normal";
                 return (
                   <TableRow key={row.id} className={!isNormal ? "opacity-50 bg-muted/30" : ""}>
@@ -453,26 +469,31 @@ export default function ProductionSaisieVariete() {
                     </TableCell>
                     <TableCell>
                       <Input type="number" min={1} max={20} value={row.ligne}
-                        onChange={e => updateRow(row.id, "ligne", Number(e.target.value))} className="h-8 w-16" />
+                        onChange={e => updateRow(row.id, "ligne", Number(e.target.value))} className="h-8 w-16"
+                        data-row={rowIdx} data-col={0} onKeyDown={e => handleCellKeyDown(e as any, rowIdx, 0)} />
                     </TableCell>
                     <TableCell>
                       <Input type="number" min={1} max={25} value={row.position}
-                        onChange={e => updateRow(row.id, "position", Number(e.target.value))} className="h-8 w-16" />
+                        onChange={e => updateRow(row.id, "position", Number(e.target.value))} className="h-8 w-16"
+                        data-row={rowIdx} data-col={1} onKeyDown={e => handleCellKeyDown(e as any, rowIdx, 1)} />
                     </TableCell>
                     <TableCell>
                       <Input type="number" step="0.01" placeholder="-" value={row.poids ?? ""}
                         onChange={e => updateRow(row.id, "poids", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-24" disabled={!isNormal} />
+                        className="h-8 w-24" disabled={!isNormal}
+                        data-row={rowIdx} data-col={2} onKeyDown={e => handleCellKeyDown(e as any, rowIdx, 2)} />
                     </TableCell>
                     <TableCell>
                       <Input type="number" placeholder="-" value={row.fruits ?? ""}
                         onChange={e => updateRow(row.id, "fruits", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-20" disabled={!isNormal} />
+                        className="h-8 w-20" disabled={!isNormal}
+                        data-row={rowIdx} data-col={3} onKeyDown={e => handleCellKeyDown(e as any, rowIdx, 3)} />
                     </TableCell>
                     <TableCell>
                       <Input type="number" step="0.1" placeholder="-" value={row.calibre ?? ""}
                         onChange={e => updateRow(row.id, "calibre", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-20" disabled={!isNormal} />
+                        className="h-8 w-20" disabled={!isNormal}
+                        data-row={rowIdx} data-col={4} onKeyDown={e => handleCellKeyDown(e as any, rowIdx, 4)} />
                     </TableCell>
                     <TableCell>
                       <Select value={row.qualite} onValueChange={v => updateRow(row.id, "qualite", v)} disabled={!isNormal}>
