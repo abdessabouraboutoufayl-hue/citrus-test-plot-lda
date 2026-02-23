@@ -19,7 +19,6 @@ export function AppSidebar() {
 
   const productionItems = [
     { title: "Saisie par variété", url: "/production/saisie-par-variete", icon: TreePine },
-    { title: "Saisie unitaire", url: "/production/new", icon: PlusCircle },
     { title: "Liste production", url: "/production", icon: List },
     { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3 },
   ];
