@@ -16,16 +16,11 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Save, Plus, Minus, Copy, TreePine } from "lucide-react";
 
 interface RowData {
   id: number;
-  pgId: number | null;
   ligne: number;
   position: number;
   poids: number | null;
@@ -35,9 +30,8 @@ interface RowData {
   statut: "Normal" | "Chétif" | "Manquant";
 }
 
-const emptyRow = (id: number, pos: number, pgId: number | null): RowData => ({
+const emptyRow = (id: number, pos: number): RowData => ({
   id,
-  pgId,
   ligne: 1,
   position: pos,
   poids: null,
@@ -53,20 +47,14 @@ export default function ProductionSaisieVariete() {
   const queryClient = useQueryClient();
 
   const [varieteId, setVarieteId] = useState<number | null>(null);
-  const [selectedPGs, setSelectedPGs] = useState<number[]>([]);
+  const [selectedPG, setSelectedPG] = useState<number | null>(null);
   const [domaineId, setDomaineId] = useState<number | null>(null);
   const [campagneId, setCampagneId] = useState<number | null>(null);
   const [dateRecolte, setDateRecolte] = useState(new Date().toISOString().split("T")[0]);
   const [nbArbres, setNbArbres] = useState(5);
   const [rows, setRows] = useState<RowData[]>(
-    Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1, null))
+    Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1))
   );
-
-  // Duplication dialog
-  const [dupDialogOpen, setDupDialogOpen] = useState(false);
-  const [dupRowId, setDupRowId] = useState<number | null>(null);
-  const [dupMode, setDupMode] = useState<"same" | "other" | "all">("same");
-  const [dupTargetPG, setDupTargetPG] = useState<number | null>(null);
 
   const isCentral = userInfo.role === "responsable_central";
   const effectiveDomaineId = isCentral ? domaineId : userInfo.domaineId;
@@ -104,17 +92,7 @@ export default function ProductionSaisieVariete() {
   });
 
   const currentDomaine = domaines.find(d => d.id === effectiveDomaineId);
-
-  const togglePG = useCallback((pgId: number) => {
-    setSelectedPGs(prev => {
-      const next = prev.includes(pgId) ? prev.filter(id => id !== pgId) : [...prev, pgId];
-      // Auto-fill PG for rows that have no PG set
-      if (!prev.includes(pgId) && next.includes(pgId)) {
-        setRows(r => r.map(row => row.pgId === null ? { ...row, pgId: pgId } : row));
-      }
-      return next;
-    });
-  }, []);
+  const currentPG = porteGreffes.find(p => p.id === selectedPG);
 
   const updateRow = useCallback((id: number, field: keyof RowData, value: any) => {
     setRows(prev => prev.map(r => {
@@ -132,11 +110,10 @@ export default function ProductionSaisieVariete() {
   const addRow = useCallback(() => {
     setRows(prev => {
       const newId = Math.max(...prev.map(r => r.id), 0) + 1;
-      const defaultPG = selectedPGs.length === 1 ? selectedPGs[0] : (selectedPGs[0] ?? null);
-      return [...prev, emptyRow(newId, prev.length + 1, defaultPG)];
+      return [...prev, emptyRow(newId, prev.length + 1)];
     });
     setNbArbres(prev => prev + 1);
-  }, [selectedPGs]);
+  }, []);
 
   const removeRow = useCallback(() => {
     if (rows.length <= 1) return;
@@ -144,61 +121,34 @@ export default function ProductionSaisieVariete() {
     setNbArbres(prev => Math.max(1, prev - 1));
   }, [rows.length]);
 
-  const openDupDialog = useCallback((id: number) => {
-    setDupRowId(id);
-    setDupMode("same");
-    setDupTargetPG(selectedPGs[0] ?? null);
-    setDupDialogOpen(true);
-  }, [selectedPGs]);
-
-  const executeDuplicate = useCallback(() => {
-    if (dupRowId === null) return;
+  const duplicateRow = useCallback((id: number) => {
     setRows(prev => {
-      const source = prev.find(r => r.id === dupRowId);
+      const source = prev.find(r => r.id === id);
       if (!source) return prev;
-      const idx = prev.findIndex(r => r.id === dupRowId);
-      let maxId = Math.max(...prev.map(r => r.id), 0);
-      const newRows: RowData[] = [];
-
-      if (dupMode === "same") {
-        maxId++;
-        newRows.push({ ...source, id: maxId, position: source.position + 1 });
-      } else if (dupMode === "other" && dupTargetPG) {
-        maxId++;
-        const maxPos = Math.max(...prev.filter(r => r.pgId === dupTargetPG).map(r => r.position), 0);
-        newRows.push({ ...source, id: maxId, pgId: dupTargetPG, position: maxPos + 1 });
-      } else if (dupMode === "all") {
-        for (const pgId of selectedPGs) {
-          if (pgId === source.pgId) continue;
-          maxId++;
-          const maxPos = Math.max(...prev.filter(r => r.pgId === pgId).map(r => r.position), 0);
-          newRows.push({ ...source, id: maxId, pgId, position: maxPos + 1 });
-        }
-      }
-
+      const idx = prev.findIndex(r => r.id === id);
+      const maxId = Math.max(...prev.map(r => r.id), 0) + 1;
+      const newRow = { ...source, id: maxId, position: source.position + 1 };
       const result = [...prev];
-      result.splice(idx + 1, 0, ...newRows);
+      result.splice(idx + 1, 0, newRow);
       return result;
     });
-    setNbArbres(prev => prev + (dupMode === "all" ? selectedPGs.length - 1 : 1));
-    setDupDialogOpen(false);
-  }, [dupRowId, dupMode, dupTargetPG, selectedPGs]);
+    setNbArbres(prev => prev + 1);
+  }, []);
 
   const handleNbArbresChange = useCallback((val: number) => {
     const clamped = Math.max(1, Math.min(20, val));
     setNbArbres(clamped);
     setRows(prev => {
       if (clamped > prev.length) {
-        const defaultPG = selectedPGs.length === 1 ? selectedPGs[0] : (selectedPGs[0] ?? null);
         const extras = Array.from({ length: clamped - prev.length }, (_, i) => {
           const newId = Math.max(...prev.map(r => r.id), 0) + 1 + i;
-          return emptyRow(newId, prev.length + i + 1, defaultPG);
+          return emptyRow(newId, prev.length + i + 1);
         });
         return [...prev, ...extras];
       }
       return prev.slice(0, clamped);
     });
-  }, [selectedPGs]);
+  }, []);
 
   const stats = useMemo(() => {
     const normalRows = rows.filter(r => r.statut === "Normal");
@@ -247,41 +197,38 @@ export default function ProductionSaisieVariete() {
         if (r.ligne < 1 || r.ligne > 20) errors.push(`Ligne ${i + 1}: numéro de ligne doit être 1-20`);
         if (r.position < 1 || r.position > 25) errors.push(`Ligne ${i + 1}: position doit être 1-25`);
         if (r.poids !== null && r.poids <= 0) errors.push(`Ligne ${i + 1}: poids doit être > 0`);
-        if (!r.pgId) errors.push(`Ligne ${i + 1}: porte-greffe requis`);
       }
     });
     return errors;
   }, [rows]);
 
-  const canSave = varieteId && selectedPGs.length > 0 && effectiveDomaineId && campagneId && dateRecolte
-    && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0 && r.pgId)
+  const canSave = varieteId && selectedPG && effectiveDomaineId && campagneId && dateRecolte
+    && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0)
     && validationErrors.length === 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !effectiveDomaineId || !campagneId || !varieteId) {
+      if (!user || !effectiveDomaineId || !campagneId || !varieteId || !selectedPG) {
         throw new Error("Données incomplètes");
       }
 
-      const allInserts = rows
-        .filter(r => r.pgId)
-        .map(r => ({
-          domaine_id: effectiveDomaineId,
-          campagne_id: campagneId,
-          variete_id: varieteId,
-          porte_greffe_id: r.pgId!,
-          ligne_numero: r.ligne,
-          position_ligne: r.position,
-          date_recolte: dateRecolte,
-          poids_total_kg: r.statut === "Normal" ? (r.poids || 0) : 0,
-          nb_fruits_total: r.statut === "Normal" ? (r.fruits || 0) : 0,
-          calibre_moyen_mm: r.statut === "Normal" ? (r.calibre || null) : null,
-          qualite_globale: r.statut === "Normal" ? (r.qualite || null) : null,
-          statut_validation: "Brouillon",
-          user_id: user.id,
-          arbre_statut: r.statut,
-          arbre_inclus_calculs: r.statut === "Normal",
-        }));
+      const allInserts = rows.map(r => ({
+        domaine_id: effectiveDomaineId,
+        campagne_id: campagneId,
+        variete_id: varieteId,
+        porte_greffe_id: selectedPG,
+        ligne_numero: r.ligne,
+        position_ligne: r.position,
+        date_recolte: dateRecolte,
+        poids_total_kg: r.statut === "Normal" ? (r.poids || 0) : 0,
+        nb_fruits_total: r.statut === "Normal" ? (r.fruits || 0) : 0,
+        calibre_moyen_mm: r.statut === "Normal" ? (r.calibre || null) : null,
+        qualite_globale: r.statut === "Normal" ? (r.qualite || null) : null,
+        statut_validation: "Brouillon",
+        user_id: user.id,
+        arbre_statut: r.statut,
+        arbre_inclus_calculs: r.statut === "Normal",
+      }));
 
       if (allInserts.length === 0) throw new Error("Aucune donnée à enregistrer");
 
@@ -306,7 +253,7 @@ export default function ProductionSaisieVariete() {
             Saisie par Variété / Porte-greffe
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Saisissez la production de plusieurs arbres d'une même combinaison variété/porte-greffe
+            Saisissez la production de plusieurs arbres pour une combinaison variété + porte-greffe unique
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate("/production")}>Retour</Button>
@@ -364,20 +311,17 @@ export default function ProductionSaisieVariete() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Porte-greffes (cocher les PG utilisés)</Label>
-              <div className="flex gap-2 flex-wrap">
-                {porteGreffes.map(pg => (
-                  <Button
-                    key={pg.id}
-                    type="button"
-                    variant={selectedPGs.includes(pg.id) ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => togglePG(pg.id)}
-                  >
-                    {pg.code_pg}
-                  </Button>
-                ))}
-              </div>
+              <Label>Porte-greffe</Label>
+              <Select value={selectedPG?.toString() || ""} onValueChange={v => setSelectedPG(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner un PG" />
+                </SelectTrigger>
+                <SelectContent>
+                  {porteGreffes.map(pg => (
+                    <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg} - {pg.nom_pg}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
@@ -397,14 +341,11 @@ export default function ProductionSaisieVariete() {
             </div>
           </div>
 
-          {selectedVariete && selectedPGs.length > 0 && (
+          {selectedVariete && selectedPG && (
             <div className="mt-4 flex gap-2 flex-wrap">
               <Badge variant="secondary">{selectedVariete.code_variete}</Badge>
               {selectedVariete.nom_commercial && <Badge variant="outline">{selectedVariete.nom_commercial}</Badge>}
-              {selectedPGs.map(pgId => {
-                const pg = porteGreffes.find(p => p.id === pgId);
-                return pg ? <Badge key={pgId} variant="outline">PG: {pg.code_pg}</Badge> : null;
-              })}
+              <Badge variant="outline">PG: {currentPG?.code_pg}</Badge>
               {currentDomaine && <Badge variant="outline">{currentDomaine.nom}</Badge>}
             </div>
           )}
@@ -431,7 +372,6 @@ export default function ProductionSaisieVariete() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">☑</TableHead>
-                <TableHead className="w-24">PG</TableHead>
                 <TableHead className="w-20">Ligne</TableHead>
                 <TableHead className="w-20">Position</TableHead>
                 <TableHead>Poids (kg)</TableHead>
@@ -449,23 +389,6 @@ export default function ProductionSaisieVariete() {
                   <TableRow key={row.id} className={!isNormal ? "opacity-50 bg-muted/30" : ""}>
                     <TableCell>
                       <Checkbox checked={isNormal} disabled />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.pgId?.toString() || ""}
-                        onValueChange={v => updateRow(row.id, "pgId", Number(v))}
-                      >
-                        <SelectTrigger className="h-8 w-24">
-                          <SelectValue placeholder="PG" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {porteGreffes
-                            .filter(pg => selectedPGs.includes(pg.id))
-                            .map(pg => (
-                              <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg}</SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
                     </TableCell>
                     <TableCell>
                       <Input type="number" min={1} max={20} value={row.ligne}
@@ -518,7 +441,7 @@ export default function ProductionSaisieVariete() {
                     </TableCell>
                     <TableCell>
                       <Button type="button" variant="ghost" size="icon" className="h-8 w-8"
-                        onClick={() => openDupDialog(row.id)} title="Dupliquer">
+                        onClick={() => duplicateRow(row.id)} title="Dupliquer">
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>
@@ -575,47 +498,6 @@ export default function ProductionSaisieVariete() {
           {saveMutation.isPending ? "Enregistrement..." : "Sauvegarder tout"}
         </Button>
       </div>
-
-      {/* Duplication Dialog */}
-      <Dialog open={dupDialogOpen} onOpenChange={setDupDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Dupliquer la ligne</DialogTitle>
-          </DialogHeader>
-          <RadioGroup value={dupMode} onValueChange={v => setDupMode(v as typeof dupMode)} className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="same" id="dup-same" />
-              <Label htmlFor="dup-same">Même PG</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="other" id="dup-other" />
-              <Label htmlFor="dup-other" className="flex items-center gap-2">
-                Autre PG
-                {dupMode === "other" && (
-                  <Select value={dupTargetPG?.toString() || ""} onValueChange={v => setDupTargetPG(Number(v))}>
-                    <SelectTrigger className="h-8 w-24"><SelectValue placeholder="PG" /></SelectTrigger>
-                    <SelectContent>
-                      {porteGreffes.filter(pg => selectedPGs.includes(pg.id)).map(pg => (
-                        <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </Label>
-            </div>
-            {selectedPGs.length > 1 && (
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="all" id="dup-all" />
-                <Label htmlFor="dup-all">Tous les PG cochés ({selectedPGs.length})</Label>
-              </div>
-            )}
-          </RadioGroup>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDupDialogOpen(false)}>Annuler</Button>
-            <Button onClick={executeDuplicate}>Dupliquer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
