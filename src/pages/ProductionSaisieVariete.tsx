@@ -16,11 +16,16 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Save, Plus, Minus, Copy, TreePine, AlertTriangle } from "lucide-react";
+import { Save, Plus, Minus, Copy, TreePine } from "lucide-react";
 
 interface RowData {
   id: number;
+  pgId: number | null;
   ligne: number;
   position: number;
   poids: number | null;
@@ -30,8 +35,9 @@ interface RowData {
   statut: "Normal" | "Chétif" | "Manquant";
 }
 
-const emptyRow = (id: number, pos: number): RowData => ({
+const emptyRow = (id: number, pos: number, pgId: number | null): RowData => ({
   id,
+  pgId,
   ligne: 1,
   position: pos,
   poids: null,
@@ -47,14 +53,20 @@ export default function ProductionSaisieVariete() {
   const queryClient = useQueryClient();
 
   const [varieteId, setVarieteId] = useState<number | null>(null);
-  const [porteGreffeId, setPorteGreffeId] = useState<number | null>(null);
+  const [selectedPGs, setSelectedPGs] = useState<number[]>([]);
   const [domaineId, setDomaineId] = useState<number | null>(null);
   const [campagneId, setCampagneId] = useState<number | null>(null);
   const [dateRecolte, setDateRecolte] = useState(new Date().toISOString().split("T")[0]);
   const [nbArbres, setNbArbres] = useState(5);
   const [rows, setRows] = useState<RowData[]>(
-    Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1))
+    Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1, null))
   );
+
+  // Duplication dialog
+  const [dupDialogOpen, setDupDialogOpen] = useState(false);
+  const [dupRowId, setDupRowId] = useState<number | null>(null);
+  const [dupMode, setDupMode] = useState<"same" | "other" | "all">("same");
+  const [dupTargetPG, setDupTargetPG] = useState<number | null>(null);
 
   const isCentral = userInfo.role === "responsable_central";
   const effectiveDomaineId = isCentral ? domaineId : userInfo.domaineId;
@@ -93,18 +105,25 @@ export default function ProductionSaisieVariete() {
 
   const currentDomaine = domaines.find(d => d.id === effectiveDomaineId);
 
+  const togglePG = useCallback((pgId: number) => {
+    setSelectedPGs(prev => {
+      const next = prev.includes(pgId) ? prev.filter(id => id !== pgId) : [...prev, pgId];
+      // Auto-fill PG for rows that have no PG set
+      if (!prev.includes(pgId) && next.includes(pgId)) {
+        setRows(r => r.map(row => row.pgId === null ? { ...row, pgId: pgId } : row));
+      }
+      return next;
+    });
+  }, []);
+
   const updateRow = useCallback((id: number, field: keyof RowData, value: any) => {
     setRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
-      // Auto-update checkbox behavior based on statut
-      if (field === "statut") {
-        // Clear data for non-normal statuses
-        if (value !== "Normal") {
-          updated.poids = null;
-          updated.fruits = null;
-          updated.calibre = null;
-        }
+      if (field === "statut" && value !== "Normal") {
+        updated.poids = null;
+        updated.fruits = null;
+        updated.calibre = null;
       }
       return updated;
     }));
@@ -113,10 +132,11 @@ export default function ProductionSaisieVariete() {
   const addRow = useCallback(() => {
     setRows(prev => {
       const newId = Math.max(...prev.map(r => r.id), 0) + 1;
-      return [...prev, emptyRow(newId, prev.length + 1)];
+      const defaultPG = selectedPGs.length === 1 ? selectedPGs[0] : (selectedPGs[0] ?? null);
+      return [...prev, emptyRow(newId, prev.length + 1, defaultPG)];
     });
     setNbArbres(prev => prev + 1);
-  }, []);
+  }, [selectedPGs]);
 
   const removeRow = useCallback(() => {
     if (rows.length <= 1) return;
@@ -124,36 +144,62 @@ export default function ProductionSaisieVariete() {
     setNbArbres(prev => Math.max(1, prev - 1));
   }, [rows.length]);
 
-  const duplicateRow = useCallback((id: number) => {
+  const openDupDialog = useCallback((id: number) => {
+    setDupRowId(id);
+    setDupMode("same");
+    setDupTargetPG(selectedPGs[0] ?? null);
+    setDupDialogOpen(true);
+  }, [selectedPGs]);
+
+  const executeDuplicate = useCallback(() => {
+    if (dupRowId === null) return;
     setRows(prev => {
-      const source = prev.find(r => r.id === id);
+      const source = prev.find(r => r.id === dupRowId);
       if (!source) return prev;
-      const newId = Math.max(...prev.map(r => r.id), 0) + 1;
-      const idx = prev.findIndex(r => r.id === id);
-      const newRow = { ...source, id: newId, position: source.position + 1 };
+      const idx = prev.findIndex(r => r.id === dupRowId);
+      let maxId = Math.max(...prev.map(r => r.id), 0);
+      const newRows: RowData[] = [];
+
+      if (dupMode === "same") {
+        maxId++;
+        newRows.push({ ...source, id: maxId, position: source.position + 1 });
+      } else if (dupMode === "other" && dupTargetPG) {
+        maxId++;
+        const maxPos = Math.max(...prev.filter(r => r.pgId === dupTargetPG).map(r => r.position), 0);
+        newRows.push({ ...source, id: maxId, pgId: dupTargetPG, position: maxPos + 1 });
+      } else if (dupMode === "all") {
+        for (const pgId of selectedPGs) {
+          if (pgId === source.pgId) continue;
+          maxId++;
+          const maxPos = Math.max(...prev.filter(r => r.pgId === pgId).map(r => r.position), 0);
+          newRows.push({ ...source, id: maxId, pgId, position: maxPos + 1 });
+        }
+      }
+
       const result = [...prev];
-      result.splice(idx + 1, 0, newRow);
+      result.splice(idx + 1, 0, ...newRows);
       return result;
     });
-    setNbArbres(prev => prev + 1);
-  }, []);
+    setNbArbres(prev => prev + (dupMode === "all" ? selectedPGs.length - 1 : 1));
+    setDupDialogOpen(false);
+  }, [dupRowId, dupMode, dupTargetPG, selectedPGs]);
 
   const handleNbArbresChange = useCallback((val: number) => {
     const clamped = Math.max(1, Math.min(20, val));
     setNbArbres(clamped);
     setRows(prev => {
       if (clamped > prev.length) {
+        const defaultPG = selectedPGs.length === 1 ? selectedPGs[0] : (selectedPGs[0] ?? null);
         const extras = Array.from({ length: clamped - prev.length }, (_, i) => {
           const newId = Math.max(...prev.map(r => r.id), 0) + 1 + i;
-          return emptyRow(newId, prev.length + i + 1);
+          return emptyRow(newId, prev.length + i + 1, defaultPG);
         });
         return [...prev, ...extras];
       }
       return prev.slice(0, clamped);
     });
-  }, []);
+  }, [selectedPGs]);
 
-  // Stats computed from "Normal" rows only
   const stats = useMemo(() => {
     const normalRows = rows.filter(r => r.statut === "Normal");
     const filledRows = normalRows.filter(r => r.poids !== null && r.poids > 0);
@@ -163,13 +209,12 @@ export default function ProductionSaisieVariete() {
     const totalPoids = filledRows.reduce((s, r) => s + (r.poids || 0), 0);
     const totalFruits = filledRows.reduce((s, r) => s + (r.fruits || 0), 0);
     const moyPoids = filledRows.length > 0 ? totalPoids / filledRows.length : 0;
-    const nbProductifs = filledRows.length;
 
     return {
       totalPoids: Math.round(totalPoids * 100) / 100,
       totalFruits,
       moyPoids: Math.round(moyPoids * 100) / 100,
-      nbProductifs,
+      nbProductifs: filledRows.length,
       chetifCount,
       manquantCount,
       total: rows.length,
@@ -177,74 +222,67 @@ export default function ProductionSaisieVariete() {
   }, [rows]);
 
   const selectedVariete = varietes.find(v => v.id === varieteId);
-  const selectedPG = porteGreffes.find(pg => pg.id === porteGreffeId);
 
-  const canSave = varieteId && porteGreffeId && effectiveDomaineId && campagneId && dateRecolte
-    && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0);
+  // Validation
+  const validationErrors = useMemo(() => {
+    const errors: string[] = [];
+    rows.forEach((r, i) => {
+      if (r.statut === "Normal") {
+        if (r.ligne < 1 || r.ligne > 20) errors.push(`Ligne ${i + 1}: numéro de ligne doit être 1-20`);
+        if (r.position < 1 || r.position > 25) errors.push(`Ligne ${i + 1}: position doit être 1-25`);
+        if (r.poids !== null && r.poids <= 0) errors.push(`Ligne ${i + 1}: poids doit être > 0`);
+        if (!r.pgId) errors.push(`Ligne ${i + 1}: porte-greffe requis`);
+      }
+    });
+    return errors;
+  }, [rows]);
+
+  const canSave = varieteId && selectedPGs.length > 0 && effectiveDomaineId && campagneId && dateRecolte
+    && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0 && r.pgId)
+    && validationErrors.length === 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !effectiveDomaineId || !campagneId || !varieteId || !porteGreffeId) {
+      if (!user || !effectiveDomaineId || !campagneId || !varieteId) {
         throw new Error("Données incomplètes");
       }
 
-      const inserts = rows
-        .filter(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0)
+      const allInserts = rows
+        .filter(r => r.pgId)
         .map(r => ({
           domaine_id: effectiveDomaineId,
           campagne_id: campagneId,
           variete_id: varieteId,
-          porte_greffe_id: porteGreffeId,
+          porte_greffe_id: r.pgId!,
           ligne_numero: r.ligne,
           position_ligne: r.position,
           date_recolte: dateRecolte,
-          poids_total_kg: r.poids!,
-          nb_fruits_total: r.fruits!,
-          calibre_moyen_mm: r.calibre || null,
-          qualite_globale: r.qualite || null,
+          poids_total_kg: r.statut === "Normal" ? (r.poids || 0) : 0,
+          nb_fruits_total: r.statut === "Normal" ? (r.fruits || 0) : 0,
+          calibre_moyen_mm: r.statut === "Normal" ? (r.calibre || null) : null,
+          qualite_globale: r.statut === "Normal" ? (r.qualite || null) : null,
           statut_validation: "Brouillon",
           user_id: user.id,
           arbre_statut: r.statut,
           arbre_inclus_calculs: r.statut === "Normal",
         }));
 
-      // Also insert non-normal rows to track chétif/manquant
-      const nonNormalInserts = rows
-        .filter(r => r.statut !== "Normal")
-        .map(r => ({
-          domaine_id: effectiveDomaineId,
-          campagne_id: campagneId,
-          variete_id: varieteId,
-          porte_greffe_id: porteGreffeId,
-          ligne_numero: r.ligne,
-          position_ligne: r.position,
-          date_recolte: dateRecolte,
-          poids_total_kg: 0,
-          nb_fruits_total: 0,
-          calibre_moyen_mm: null,
-          qualite_globale: null,
-          statut_validation: "Brouillon",
-          user_id: user.id,
-          arbre_statut: r.statut,
-          arbre_inclus_calculs: false,
-        }));
-
-      const allInserts = [...inserts, ...nonNormalInserts];
       if (allInserts.length === 0) throw new Error("Aucune donnée à enregistrer");
 
       const { error } = await supabase.from("production").insert(allInserts);
       if (error) throw error;
     },
     onSuccess: () => {
+      const excluded = rows.filter(r => r.statut !== "Normal").length;
       queryClient.invalidateQueries({ queryKey: ["productions"] });
-      toast.success(`${stats.nbProductifs} arbres enregistrés avec succès`);
+      toast.success(`${stats.nbProductifs} arbres enregistrés${excluded > 0 ? ` (${excluded} exclus)` : ""}`);
       navigate("/production");
     },
     onError: (err: any) => toast.error(err.message),
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -258,7 +296,7 @@ export default function ProductionSaisieVariete() {
         <Button variant="outline" onClick={() => navigate("/production")}>Retour</Button>
       </div>
 
-      {/* Sélection initiale */}
+      {/* Paramètres */}
       <Card>
         <CardHeader><CardTitle className="text-lg">Paramètres de saisie</CardTitle></CardHeader>
         <CardContent>
@@ -310,15 +348,15 @@ export default function ProductionSaisieVariete() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Porte-greffe</Label>
+              <Label>Porte-greffes (cocher les PG utilisés)</Label>
               <div className="flex gap-2 flex-wrap">
                 {porteGreffes.map(pg => (
                   <Button
                     key={pg.id}
                     type="button"
-                    variant={porteGreffeId === pg.id ? "default" : "outline"}
+                    variant={selectedPGs.includes(pg.id) ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPorteGreffeId(pg.id)}
+                    onClick={() => togglePG(pg.id)}
                   >
                     {pg.code_pg}
                   </Button>
@@ -343,13 +381,14 @@ export default function ProductionSaisieVariete() {
             </div>
           </div>
 
-          {selectedVariete && selectedPG && (
+          {selectedVariete && selectedPGs.length > 0 && (
             <div className="mt-4 flex gap-2 flex-wrap">
               <Badge variant="secondary">{selectedVariete.code_variete}</Badge>
-              {selectedVariete.nom_commercial && (
-                <Badge variant="outline">{selectedVariete.nom_commercial}</Badge>
-              )}
-              <Badge variant="outline">PG: {selectedPG.code_pg}</Badge>
+              {selectedVariete.nom_commercial && <Badge variant="outline">{selectedVariete.nom_commercial}</Badge>}
+              {selectedPGs.map(pgId => {
+                const pg = porteGreffes.find(p => p.id === pgId);
+                return pg ? <Badge key={pgId} variant="outline">PG: {pg.code_pg}</Badge> : null;
+              })}
               {currentDomaine && <Badge variant="outline">{currentDomaine.nom}</Badge>}
             </div>
           )}
@@ -371,11 +410,12 @@ export default function ProductionSaisieVariete() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">☑</TableHead>
+                <TableHead className="w-24">PG</TableHead>
                 <TableHead className="w-20">Ligne</TableHead>
                 <TableHead className="w-20">Position</TableHead>
                 <TableHead>Poids (kg)</TableHead>
@@ -395,62 +435,48 @@ export default function ProductionSaisieVariete() {
                       <Checkbox checked={isNormal} disabled />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={row.ligne}
-                        onChange={e => updateRow(row.id, "ligne", Number(e.target.value))}
-                        className="h-8 w-16"
-                      />
+                      <Select
+                        value={row.pgId?.toString() || ""}
+                        onValueChange={v => updateRow(row.id, "pgId", Number(v))}
+                      >
+                        <SelectTrigger className="h-8 w-24">
+                          <SelectValue placeholder="PG" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {porteGreffes
+                            .filter(pg => selectedPGs.includes(pg.id))
+                            .map(pg => (
+                              <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg}</SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={25}
-                        value={row.position}
-                        onChange={e => updateRow(row.id, "position", Number(e.target.value))}
-                        className="h-8 w-16"
-                      />
+                      <Input type="number" min={1} max={20} value={row.ligne}
+                        onChange={e => updateRow(row.id, "ligne", Number(e.target.value))} className="h-8 w-16" />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="-"
-                        value={row.poids ?? ""}
+                      <Input type="number" min={1} max={25} value={row.position}
+                        onChange={e => updateRow(row.id, "position", Number(e.target.value))} className="h-8 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" step="0.01" placeholder="-" value={row.poids ?? ""}
                         onChange={e => updateRow(row.id, "poids", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-24"
-                        disabled={!isNormal}
-                      />
+                        className="h-8 w-24" disabled={!isNormal} />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        placeholder="-"
-                        value={row.fruits ?? ""}
+                      <Input type="number" placeholder="-" value={row.fruits ?? ""}
                         onChange={e => updateRow(row.id, "fruits", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-20"
-                        disabled={!isNormal}
-                      />
+                        className="h-8 w-20" disabled={!isNormal} />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        placeholder="-"
-                        value={row.calibre ?? ""}
+                      <Input type="number" step="0.1" placeholder="-" value={row.calibre ?? ""}
                         onChange={e => updateRow(row.id, "calibre", e.target.value ? Number(e.target.value) : null)}
-                        className="h-8 w-20"
-                        disabled={!isNormal}
-                      />
+                        className="h-8 w-20" disabled={!isNormal} />
                     </TableCell>
                     <TableCell>
                       <Select value={row.qualite} onValueChange={v => updateRow(row.id, "qualite", v)} disabled={!isNormal}>
-                        <SelectTrigger className="h-8 w-16">
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-8 w-16"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="A">A</SelectItem>
                           <SelectItem value="B">B</SelectItem>
@@ -461,9 +487,7 @@ export default function ProductionSaisieVariete() {
                     </TableCell>
                     <TableCell>
                       <Select value={row.statut} onValueChange={v => updateRow(row.id, "statut", v as RowData["statut"])}>
-                        <SelectTrigger className="h-8 w-28">
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Normal">Normal</SelectItem>
                           <SelectItem value="Chétif">Chétif</SelectItem>
@@ -472,7 +496,8 @@ export default function ProductionSaisieVariete() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateRow(row.id)} title="Dupliquer">
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8"
+                        onClick={() => openDupDialog(row.id)} title="Dupliquer">
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>
@@ -484,7 +509,7 @@ export default function ProductionSaisieVariete() {
         </CardContent>
       </Card>
 
-      {/* Calculs automatiques */}
+      {/* Stats footer */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -517,7 +542,7 @@ export default function ProductionSaisieVariete() {
         </CardContent>
       </Card>
 
-      {/* Bouton sauvegarder */}
+      {/* Save */}
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => navigate("/production")}>Annuler</Button>
         <Button
@@ -529,6 +554,47 @@ export default function ProductionSaisieVariete() {
           {saveMutation.isPending ? "Enregistrement..." : "Sauvegarder tout"}
         </Button>
       </div>
+
+      {/* Duplication Dialog */}
+      <Dialog open={dupDialogOpen} onOpenChange={setDupDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dupliquer la ligne</DialogTitle>
+          </DialogHeader>
+          <RadioGroup value={dupMode} onValueChange={v => setDupMode(v as typeof dupMode)} className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="same" id="dup-same" />
+              <Label htmlFor="dup-same">Même PG</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="other" id="dup-other" />
+              <Label htmlFor="dup-other" className="flex items-center gap-2">
+                Autre PG
+                {dupMode === "other" && (
+                  <Select value={dupTargetPG?.toString() || ""} onValueChange={v => setDupTargetPG(Number(v))}>
+                    <SelectTrigger className="h-8 w-24"><SelectValue placeholder="PG" /></SelectTrigger>
+                    <SelectContent>
+                      {porteGreffes.filter(pg => selectedPGs.includes(pg.id)).map(pg => (
+                        <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </Label>
+            </div>
+            {selectedPGs.length > 1 && (
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="all" id="dup-all" />
+                <Label htmlFor="dup-all">Tous les PG cochés ({selectedPGs.length})</Label>
+              </div>
+            )}
+          </RadioGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDupDialogOpen(false)}>Annuler</Button>
+            <Button onClick={executeDuplicate}>Dupliquer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

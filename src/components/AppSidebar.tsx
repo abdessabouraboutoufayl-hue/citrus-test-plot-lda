@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Upload } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -19,6 +19,7 @@ export function AppSidebar() {
 
   const productionItems = [
     { title: "Saisie par variété", url: "/production/saisie-par-variete", icon: TreePine },
+    { title: "Import Excel", url: "/production/import", icon: Upload },
     { title: "Liste production", url: "/production", icon: List },
     { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3 },
   ];
