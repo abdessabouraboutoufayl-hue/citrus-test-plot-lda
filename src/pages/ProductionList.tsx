@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Search, Download, Upload, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { useRef } from "react";
 
 const statusColors: Record<string, string> = {
   Brouillon: "bg-muted text-muted-foreground",
@@ -26,7 +25,7 @@ export default function ProductionList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
 
   const { data: productions = [], isLoading } = useQuery({
     queryKey: ["productions", userInfo.domaineId, statutFilter],
@@ -80,50 +79,52 @@ export default function ProductionList() {
 
   const exportExcel = () => {
     const rows = filtered.map((p) => ({
+      Domaine: (p.domaines as any)?.nom,
+      "Code Domaine": (p.domaines as any)?.code,
       Arbre: p.code_arbre,
       Variété: (p.varietes as any)?.code_variete,
       "Nom commercial": (p.varietes as any)?.nom_commercial,
       PG: (p.porte_greffes as any)?.code_pg,
+      Ligne: p.ligne_numero,
+      Position: p.position_ligne,
+      "Date récolte": p.date_recolte,
       "Poids (kg)": p.poids_total_kg,
       Fruits: p.nb_fruits_total,
       "Poids moy (g)": p.poids_moyen_fruit_g,
-      "Date récolte": p.date_recolte,
+      "Calibre (mm)": p.calibre_moyen_mm,
+      "Décl %": p.taux_declassement_pct,
       Qualité: p.qualite_globale,
+      "Statut arbre": p.arbre_statut,
       Statut: p.statut_validation,
+      Récoltant: p.recoltant_nom,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Style header
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[addr]) {
+        ws[addr].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2E7D32" } } };
+      }
+    }
+    // Freeze panes
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Production");
     XLSX.writeFile(wb, `Production_${new Date().toISOString().split("T")[0]}.xlsx`);
     toast.success("Export Excel téléchargé");
   };
 
-  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const wb = XLSX.read(evt.target?.result, { type: "binary" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
-        toast.info(`${jsonData.length} lignes lues. Import en cours de développement.`);
-      } catch {
-        toast.error("Erreur de lecture du fichier Excel");
-      }
-    };
-    reader.readAsBinaryString(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Productions</h1>
         <div className="flex gap-2">
-          <input type="file" ref={fileInputRef} accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
-          <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm">
-            <Upload className="h-4 w-4 mr-1" /> Import
+          <Button asChild variant="outline" size="sm">
+            <Link to="/production/import"><Upload className="h-4 w-4 mr-1" /> Import</Link>
           </Button>
           <Button onClick={exportExcel} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-1" /> Export
