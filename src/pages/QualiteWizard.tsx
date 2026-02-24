@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Save, Check, Camera, Upload, AlertTriangle, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle, Info } from "lucide-react";
 
 const schema = z.object({
   domaine_id: z.number().optional().nullable(),
@@ -542,14 +542,9 @@ export default function QualiteWizard() {
                 Suivant <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" onClick={() => onSubmit("Brouillon")} disabled={submitMutation.isPending}>
-                  <Save className="h-4 w-4 mr-1" /> Brouillon
-                </Button>
-                <Button type="button" onClick={() => onSubmit("Soumis")} disabled={submitMutation.isPending} className="bg-success hover:bg-success/90 text-success-foreground">
-                  <Check className="h-4 w-4 mr-1" /> Soumettre
-                </Button>
-              </div>
+              <Button type="button" onClick={() => onSubmit(isEdit ? (existingData?.statut_validation || "Brouillon") : "Brouillon")} disabled={submitMutation.isPending} className="bg-primary hover:bg-primary/90">
+                <Save className="h-4 w-4 mr-1" /> {isEdit ? "Enregistrer" : "Enregistrer (Brouillon)"}
+              </Button>
             )}
           </div>
         </form>
