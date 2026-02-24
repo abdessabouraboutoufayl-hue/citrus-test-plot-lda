@@ -50,6 +50,7 @@ function AppRoutes() {
         <Route path="/production" element={<ProductionList />} />
         <Route path="/production/new" element={<ProductionWizard />} />
         <Route path="/production/saisie-par-variete" element={<ProductionSaisieVariete />} />
+        <Route path="/production/edit/:id" element={<ProductionWizard />} />
         <Route path="/production/dashboard" element={<Dashboard />} />
         <Route path="/qualite" element={<QualiteList />} />
         <Route path="/qualite/new" element={<QualiteWizard />} />

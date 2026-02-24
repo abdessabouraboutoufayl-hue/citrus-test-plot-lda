@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Save, Check, Camera, Upload, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle } from "lucide-react";
 
 const schema = z.object({
   domaine_id: z.number({ required_error: "Domaine requis" }),
@@ -41,9 +41,12 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function ProductionWizard() {
+  const { id: editId } = useParams();
+  const isEdit = !!editId;
   const [step, setStep] = useState(0);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, userInfo } = useAuth();
   const isOnline = useOnlineStatus();
@@ -90,7 +93,43 @@ export default function ProductionWizard() {
     },
   });
 
-  const isCentral = userInfo.role === "responsable_central";
+  // Load existing data for edit mode
+  const { data: existingData } = useQuery({
+    queryKey: ["production-edit", editId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("production").select("*").eq("id", Number(editId)).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (existingData) {
+      form.reset({
+        domaine_id: existingData.domaine_id,
+        campagne_id: existingData.campagne_id,
+        variete_id: existingData.variete_id,
+        porte_greffe_id: existingData.porte_greffe_id,
+        ligne_numero: existingData.ligne_numero,
+        position_ligne: existingData.position_ligne,
+        date_recolte: existingData.date_recolte,
+        poids_total_kg: Number(existingData.poids_total_kg),
+        nb_fruits_total: existingData.nb_fruits_total,
+        calibre_moyen_mm: existingData.calibre_moyen_mm ? Number(existingData.calibre_moyen_mm) : undefined,
+        taux_declassement_pct: existingData.taux_declassement_pct ? Number(existingData.taux_declassement_pct) : 0,
+        qualite_globale: existingData.qualite_globale || undefined,
+        photo_legende: existingData.photo_legende || undefined,
+        recoltant_nom: existingData.recoltant_nom || undefined,
+        observations: existingData.observations || undefined,
+      });
+      if (existingData.photo_url) {
+        setExistingPhotoUrl(existingData.photo_url);
+        setPhotoPreview(existingData.photo_url);
+      }
+    }
+  }, [existingData, form]);
+
   const watchedValues = form.watch();
   const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || watchedValues.domaine_id));
   const poidsMoyen = watchedValues.poids_total_kg && watchedValues.nb_fruits_total
@@ -157,28 +196,52 @@ export default function ProductionWizard() {
         navigate("/production");
         return;
       }
+      const finalPhotoUrl = photoUrl || existingPhotoUrl;
 
-      const { error } = await supabase.from("production").insert({
-        domaine_id: domaineId!,
-        campagne_id: data.campagne_id,
-        variete_id: data.variete_id,
-        porte_greffe_id: data.porte_greffe_id,
-        ligne_numero: data.ligne_numero,
-        position_ligne: data.position_ligne,
-        date_recolte: data.date_recolte,
-        poids_total_kg: data.poids_total_kg,
-        nb_fruits_total: data.nb_fruits_total,
-        calibre_moyen_mm: data.calibre_moyen_mm || null,
-        taux_declassement_pct: data.taux_declassement_pct || null,
-        qualite_globale: data.qualite_globale || null,
-        photo_url: photoUrl,
-        photo_legende: data.photo_legende || null,
-        recoltant_nom: data.recoltant_nom || null,
-        observations: data.observations || null,
-        statut_validation: status,
-        user_id: user.id,
-      });
-      if (error) throw error;
+      if (isEdit) {
+        const { error } = await supabase.from("production").update({
+          domaine_id: domaineId!,
+          campagne_id: data.campagne_id,
+          variete_id: data.variete_id,
+          porte_greffe_id: data.porte_greffe_id,
+          ligne_numero: data.ligne_numero,
+          position_ligne: data.position_ligne,
+          date_recolte: data.date_recolte,
+          poids_total_kg: data.poids_total_kg,
+          nb_fruits_total: data.nb_fruits_total,
+          calibre_moyen_mm: data.calibre_moyen_mm || null,
+          taux_declassement_pct: data.taux_declassement_pct || null,
+          qualite_globale: data.qualite_globale || null,
+          photo_url: finalPhotoUrl,
+          photo_legende: data.photo_legende || null,
+          recoltant_nom: data.recoltant_nom || null,
+          observations: data.observations || null,
+          statut_validation: status,
+        }).eq("id", Number(editId));
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("production").insert({
+          domaine_id: domaineId!,
+          campagne_id: data.campagne_id,
+          variete_id: data.variete_id,
+          porte_greffe_id: data.porte_greffe_id,
+          ligne_numero: data.ligne_numero,
+          position_ligne: data.position_ligne,
+          date_recolte: data.date_recolte,
+          poids_total_kg: data.poids_total_kg,
+          nb_fruits_total: data.nb_fruits_total,
+          calibre_moyen_mm: data.calibre_moyen_mm || null,
+          taux_declassement_pct: data.taux_declassement_pct || null,
+          qualite_globale: data.qualite_globale || null,
+          photo_url: finalPhotoUrl,
+          photo_legende: data.photo_legende || null,
+          recoltant_nom: data.recoltant_nom || null,
+          observations: data.observations || null,
+          statut_validation: status,
+          user_id: user.id,
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Production enregistrée");
@@ -197,7 +260,7 @@ export default function ProductionWizard() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Nouvelle production</h1>
+      <h1 className="text-2xl font-bold">{isEdit ? "Modifier la production" : "Nouvelle production"}</h1>
 
       {/* Stepper */}
       <div className="flex items-center justify-center gap-2">
@@ -435,14 +498,9 @@ export default function ProductionWizard() {
                 Suivant <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => onSubmit("Brouillon")} disabled={submitMutation.isPending}>
-                  <Save className="h-4 w-4 mr-1" /> Brouillon
-                </Button>
-                <Button type="button" onClick={() => onSubmit("Soumis")} disabled={submitMutation.isPending}>
-                  <Check className="h-4 w-4 mr-1" /> Soumettre
-                </Button>
-              </div>
+              <Button type="button" onClick={() => onSubmit(isEdit ? (existingData?.statut_validation || "Brouillon") : "Brouillon")} disabled={submitMutation.isPending} className="bg-primary hover:bg-primary/90">
+                <Save className="h-4 w-4 mr-1" /> {isEdit ? "Enregistrer" : "Enregistrer (Brouillon)"}
+              </Button>
             )}
           </div>
         </form>

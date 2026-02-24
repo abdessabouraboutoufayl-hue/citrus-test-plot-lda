@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Download, Upload, Trash2, Send } from "lucide-react";
+import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -25,7 +25,20 @@ export default function ProductionList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
-  
+  const canSubmit = (p: any) => {
+    if (userInfo.role === "direction") return false;
+    return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
+  };
+
+  const canModify = (p: any) => {
+    if (userInfo.role === "direction") return false;
+    return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
+  };
+
+  const canDelete = (p: any) => {
+    if (userInfo.role === "direction") return false;
+    return p.statut_validation === "Brouillon";
+  };
 
   const { data: productions = [], isLoading } = useQuery({
     queryKey: ["productions", userInfo.domaineId, statutFilter],
@@ -195,15 +208,20 @@ export default function ProductionList() {
                     </Badge>
                   </TableCell>
                   <TableCell className="flex gap-1">
-                    {p.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
-                      <>
-                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre">
-                          <Send className="h-4 w-4 text-primary" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} title="Supprimer">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </>
+                    {canSubmit(p) && (
+                      <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre">
+                        <Send className="h-4 w-4 text-success" />
+                      </Button>
+                    )}
+                    {canModify(p) && (
+                      <Button variant="ghost" size="icon" asChild title="Modifier">
+                        <Link to={`/production/edit/${p.id}`}><Pencil className="h-4 w-4 text-primary" /></Link>
+                      </Button>
+                    )}
+                    {canDelete(p) && (
+                      <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} title="Supprimer">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -230,14 +248,23 @@ export default function ProductionList() {
                 <div><span className="text-muted-foreground">Fruits</span><br />{p.nb_fruits_total}</div>
                 <div><span className="text-muted-foreground">Qualité</span><br />{p.qualite_globale || "-"}</div>
               </div>
-              {p.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
+              {(canSubmit(p) || canModify(p) || canDelete(p)) && (
                 <div className="flex gap-2 pt-1">
-                  <Button variant="outline" size="sm" onClick={() => submitMutation.mutate(p.id)}>
-                    <Send className="h-3.5 w-3.5 mr-1" /> Soumettre
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(p.id)}>
-                    <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
-                  </Button>
+                  {canSubmit(p) && (
+                    <Button variant="outline" size="sm" onClick={() => submitMutation.mutate(p.id)}>
+                      <Send className="h-3.5 w-3.5 mr-1 text-success" /> Soumettre
+                    </Button>
+                  )}
+                  {canModify(p) && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link to={`/production/edit/${p.id}`}><Pencil className="h-3.5 w-3.5 mr-1" /> Modifier</Link>
+                    </Button>
+                  )}
+                  {canDelete(p) && (
+                    <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(p.id)}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>
