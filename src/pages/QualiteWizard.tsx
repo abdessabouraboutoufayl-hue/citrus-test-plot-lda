@@ -71,6 +71,7 @@ export default function QualiteWizard() {
       nb_fruits_echantillon: 10,
       date_analyse: new Date().toISOString().split("T")[0],
       technicien_nom: "",
+      domaine_id: userInfo.domaineId || undefined,
     },
   });
 
