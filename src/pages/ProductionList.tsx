@@ -212,9 +212,6 @@ export default function ProductionList() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Productions</h1>
         <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/production/import"><Upload className="h-4 w-4 mr-1" /> Import</Link>
-          </Button>
           <Button onClick={exportExcel} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-1" /> Export
           </Button>
