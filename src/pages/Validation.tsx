@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, XCircle, Bell, AlertTriangle, Eye } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle, XCircle, Bell, AlertTriangle, Eye, ChevronDown, MapPin, Filter, ShieldAlert, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -35,14 +40,39 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-export default function Validation() {
-  const { userInfo } = useAuth();
-  const queryClient = useQueryClient();
-  const [rejectId, setRejectId] = useState<number | null>(null);
-  const [rejectComment, setRejectComment] = useState("");
-  const [rejectType, setRejectType] = useState<"production" | "qualite">("production");
-  const [viewItem, setViewItem] = useState<{ type: "production" | "qualite"; data: any } | null>(null);
+type NiveauAlerte = "ok" | "mineur" | "attention" | "critique";
 
+function NiveauBadge({ niveau }: { niveau: NiveauAlerte | string | null }) {
+  switch (niveau) {
+    case "critique": return <Badge variant="destructive" className="text-xs">🔴 Critique</Badge>;
+    case "attention": return <Badge className="bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs">🟠 Attention</Badge>;
+    case "mineur": return <Badge className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs">🟡 Mineur</Badge>;
+    default: return <Badge className="bg-success/20 text-success text-xs">✅ OK</Badge>;
+  }
+}
+
+const REJECT_REASONS = [
+  "Poids incohérent",
+  "Nombre fruits aberrant",
+  "Données incomplètes",
+  "Photo manquante/floue",
+  "Vérifier mesure",
+  "Autre",
+];
+
+export default function Validation() {
+  const { user, userInfo } = useAuth();
+  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [rejectIds, setRejectIds] = useState<number[]>([]);
+  const [rejectReasons, setRejectReasons] = useState<string[]>([]);
+  const [rejectComment, setRejectComment] = useState("");
+  const [viewItem, setViewItem] = useState<{ type: "production" | "qualite"; data: any } | null>(null);
+  const [filterDomaine, setFilterDomaine] = useState<string>("all");
+  const [filterAlertes, setFilterAlertes] = useState(false);
+  const [openDomaines, setOpenDomaines] = useState<Set<string>>(new Set());
+
+  // ─── Queries ───
   const { data: pendingProd = [] } = useQuery({
     queryKey: ["pending-validation-prod"],
     queryFn: async () => {
@@ -69,20 +99,26 @@ export default function Validation() {
     },
   });
 
+  // ─── Mutations ───
   const validateProdMutation = useMutation({
-    mutationFn: async ({ id, status, comment }: { id: number; status: string; comment?: string }) => {
-      const { error } = await supabase.from("production").update({ statut_validation: status, commentaires_validation: comment || null }).eq("id", id);
+    mutationFn: async ({ ids, status, comment }: { ids: number[]; status: string; comment?: string }) => {
+      const { error } = await supabase.from("production")
+        .update({ statut_validation: status, commentaires_validation: comment || null })
+        .in("id", ids);
       if (error) throw error;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["pending-validation-prod"] });
-      toast.success(vars.status === "Validé" ? "Production validée" : "Production rejetée");
+      setSelectedIds(new Set());
+      toast.success(vars.status === "Validé" ? `${vars.ids.length} production(s) validée(s)` : `${vars.ids.length} production(s) rejetée(s)`);
     },
   });
 
   const validateQualiteMutation = useMutation({
     mutationFn: async ({ id, status, comment }: { id: number; status: string; comment?: string }) => {
-      const { error } = await supabase.from("qualite_interne").update({ statut_validation: status, commentaires_validation: comment || null } as any).eq("id", id);
+      const { error } = await supabase.from("qualite_interne")
+        .update({ statut_validation: status, commentaires_validation: comment || null } as any)
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: (_, vars) => {
@@ -91,28 +127,47 @@ export default function Validation() {
     },
   });
 
+  // ─── Reject handler ───
   const handleReject = () => {
-    if (rejectId) {
-      if (rejectType === "production") {
-        validateProdMutation.mutate({ id: rejectId, status: "Rejeté", comment: rejectComment });
-      } else {
-        validateQualiteMutation.mutate({ id: rejectId, status: "Rejeté", comment: rejectComment });
-      }
-      setRejectId(null);
-      setRejectComment("");
-    }
+    if (rejectIds.length === 0) return;
+    const reasonText = [...rejectReasons, rejectComment].filter(Boolean).join(" | ");
+    validateProdMutation.mutate({ ids: rejectIds, status: "Rejeté", comment: reasonText });
+    setRejectIds([]);
+    setRejectReasons([]);
+    setRejectComment("");
   };
 
-  if (userInfo.role !== "responsable_central") {
-    return <div className="text-center py-12 text-muted-foreground">Accès réservé au responsable central</div>;
-  }
+  // ─── Permissions ───
+  const isCentral = userInfo.role === "responsable_central";
+  const isResponsableDomaine = userInfo.role === "responsable_domaine";
 
-  const groupedProd: Record<string, typeof pendingProd> = {};
-  pendingProd.forEach((p) => {
-    const nom = (p.domaines as any)?.nom || "Inconnu";
-    if (!groupedProd[nom]) groupedProd[nom] = [];
-    groupedProd[nom].push(p);
-  });
+  // ─── Filtered production data ───
+  const filteredProd = useMemo(() => {
+    let items = pendingProd;
+    if (filterDomaine !== "all") items = items.filter(p => String((p.domaines as any)?.nom) === filterDomaine);
+    if (filterAlertes) items = items.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte));
+    return items;
+  }, [pendingProd, filterDomaine, filterAlertes]);
+
+  // ─── KPI ───
+  const kpi = useMemo(() => {
+    const total = pendingProd.length;
+    const withAlertes = pendingProd.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte)).length;
+    const okCount = pendingProd.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).length;
+    const domaines = new Set(pendingProd.map(p => (p.domaines as any)?.nom)).size;
+    return { total, withAlertes, okCount, domaines };
+  }, [pendingProd]);
+
+  // ─── Group by domaine ───
+  const groupedProd = useMemo(() => {
+    const groups: Record<string, typeof filteredProd> = {};
+    filteredProd.forEach(p => {
+      const nom = (p.domaines as any)?.nom || "Inconnu";
+      if (!groups[nom]) groups[nom] = [];
+      groups[nom].push(p);
+    });
+    return groups;
+  }, [filteredProd]);
 
   const groupedQualite: Record<string, any[]> = {};
   pendingQualite.forEach((a: any) => {
@@ -121,8 +176,59 @@ export default function Validation() {
     groupedQualite[nom].push(a);
   });
 
+  // ─── Selection helpers ───
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredProd.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredProd.map(p => p.id)));
+    }
+  };
+
+  const toggleSelectDomaine = (items: typeof filteredProd) => {
+    const ids = items.map(p => p.id);
+    const allSelected = ids.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
+
+  const toggleDomaine = (nom: string) => {
+    setOpenDomaines(prev => {
+      const next = new Set(prev);
+      if (next.has(nom)) next.delete(nom); else next.add(nom);
+      return next;
+    });
+  };
+
+  const uniqueDomaines = [...new Set(pendingProd.map(p => (p.domaines as any)?.nom || "Inconnu"))];
+
+  if (!isCentral && !isResponsableDomaine) {
+    return <div className="text-center py-12 text-muted-foreground">Accès réservé aux responsables</div>;
+  }
+
+  const getAlertDetails = (p: any) => {
+    const alerts: { level: string; message: string }[] = [];
+    if (p.alerte_poids_critique) alerts.push({ level: "critique", message: `Poids ${p.poids_total_kg}kg dépasse le seuil critique` });
+    if (p.alerte_poids_aberrant) alerts.push({ level: "attention", message: `Poids ${p.poids_total_kg}kg hors plage normale` });
+    if (p.alerte_fruits_anormal) alerts.push({ level: "attention", message: `Nb fruits ${p.nb_fruits_total} anormal` });
+    if (p.alerte_poids_moyen_anormal) alerts.push({ level: "mineur", message: `Poids moyen fruit ${p.poids_moyen_fruit_g?.toFixed(0)}g anormal` });
+    if (p.alerte_declassement_critique) alerts.push({ level: "critique", message: `Déclassement ${p.taux_declassement_pct}% critique` });
+    return alerts;
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center gap-3">
         <Bell className="h-6 w-6 text-warning" />
         <h1 className="text-2xl font-bold">Validation</h1>
@@ -134,46 +240,225 @@ export default function Validation() {
           <TabsTrigger value="qualite">Qualité ({pendingQualite.length})</TabsTrigger>
         </TabsList>
 
+        {/* ═══════════ PRODUCTION TAB ═══════════ */}
         <TabsContent value="production" className="space-y-4 mt-4">
-          {Object.entries(groupedProd).map(([domaine, items]) => (
-            <div key={domaine} className="space-y-3">
-              <h2 className="text-lg font-semibold">{domaine}</h2>
-              {items.map((p) => (
-                <Card key={p.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card><CardContent className="pt-4 pb-3 text-center">
+              <Bell className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-2xl font-bold">{kpi.total}</p>
+              <p className="text-xs text-muted-foreground">Productions à valider</p>
+            </CardContent></Card>
+            <Card className={kpi.withAlertes > 0 ? "border-destructive/50" : ""}>
+              <CardContent className="pt-4 pb-3 text-center">
+                <ShieldAlert className={`h-5 w-5 mx-auto mb-1 ${kpi.withAlertes > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+                <p className={`text-2xl font-bold ${kpi.withAlertes > 0 ? "text-destructive" : ""}`}>{kpi.withAlertes}</p>
+                <p className="text-xs text-muted-foreground">Avec alertes</p>
+              </CardContent>
+            </Card>
+            <Card className={kpi.okCount > 0 ? "border-success/50" : ""}>
+              <CardContent className="pt-4 pb-3 text-center">
+                <ShieldCheck className="h-5 w-5 mx-auto mb-1 text-success" />
+                <p className="text-2xl font-bold text-success">{kpi.okCount}</p>
+                <p className="text-xs text-muted-foreground">OK à valider</p>
+              </CardContent>
+            </Card>
+            <Card><CardContent className="pt-4 pb-3 text-center">
+              <MapPin className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-2xl font-bold">{kpi.domaines}</p>
+              <p className="text-xs text-muted-foreground">Domaines concernés</p>
+            </CardContent></Card>
+          </div>
+
+          {/* Filters */}
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <Select value={filterDomaine} onValueChange={setFilterDomaine}>
+                    <SelectTrigger className="w-48 h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les domaines</SelectItem>
+                      {uniqueDomaines.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={filterAlertes} onCheckedChange={setFilterAlertes} id="filter-alertes" />
+                  <Label htmlFor="filter-alertes" className="text-sm cursor-pointer">⚠️ Alertes uniquement</Label>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Batch Actions */}
+          {isCentral && filteredProd.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 px-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectedIds.size === filteredProd.length && filteredProd.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-sm text-muted-foreground">Tout sélectionner</span>
+              </div>
+              <Button
+                size="sm"
+                disabled={selectedIds.size === 0 || validateProdMutation.isPending}
+                onClick={() => validateProdMutation.mutate({ ids: [...selectedIds], status: "Validé" })}
+              >
+                <CheckCircle className="h-4 w-4 mr-1" /> Valider sélection ({selectedIds.size})
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={selectedIds.size === 0 || validateProdMutation.isPending}
+                onClick={() => { setRejectIds([...selectedIds]); }}
+              >
+                <XCircle className="h-4 w-4 mr-1" /> Rejeter sélection ({selectedIds.size})
+              </Button>
+            </div>
+          )}
+
+          {/* Accordions by domain */}
+          {Object.entries(groupedProd).map(([domaine, items]) => {
+            const alertCount = items.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte)).length;
+            const critiques = items.filter(p => (p as any).niveau_alerte === "critique");
+            const attentions = items.filter(p => (p as any).niveau_alerte === "attention");
+            const totalKg = items.reduce((s, p) => s + Number(p.poids_total_kg || 0), 0);
+            const isOpen = openDomaines.has(domaine);
+
+            return (
+              <Collapsible key={domaine} open={isOpen} onOpenChange={() => toggleDomaine(domaine)}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardContent className="pt-4 pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold">{p.code_arbre}</span>
-                          <Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`} />
+                          <span className="font-semibold">{domaine}</span>
+                          <Badge variant="outline">{items.length} arbres</Badge>
+                          {alertCount > 0 && <Badge variant="destructive" className="text-xs">⚠️ {alertCount} alertes</Badge>}
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {p.poids_total_kg} kg • {p.nb_fruits_total} fruits • {p.qualite_globale || "Non classé"}
-                        </p>
-                        {(p.taux_declassement_pct || 0) > 20 && (
-                          <Badge variant="destructive" className="text-xs">⚠️ Déclassement {p.taux_declassement_pct}%</Badge>
-                        )}
+                        <span className="text-sm text-muted-foreground">{totalKg.toFixed(1)} kg total</span>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setViewItem({ type: "production", data: p })}>
-                          <Eye className="h-4 w-4 mr-1" /> Consulter
-                        </Button>
-                        <Button size="sm" onClick={() => validateProdMutation.mutate({ id: p.id, status: "Validé" })} disabled={validateProdMutation.isPending}>
-                          <CheckCircle className="h-4 w-4 mr-1" /> Valider
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => { setRejectId(p.id); setRejectType("production"); }} disabled={validateProdMutation.isPending}>
-                          <XCircle className="h-4 w-4 mr-1" /> Rejeter
-                        </Button>
+                    </CardContent>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent>
+                    <Separator />
+                    <div className="p-4 space-y-3">
+                      {/* Alert summary box */}
+                      {alertCount > 0 && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                          <p className="text-sm font-semibold text-destructive flex items-center gap-1">
+                            <AlertTriangle className="h-4 w-4" /> ALERTES DÉTECTÉES
+                          </p>
+                          {critiques.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-destructive">🔴 CRITIQUES ({critiques.length})</p>
+                              {critiques.map(p => (
+                                <p key={p.id} className="text-xs text-muted-foreground ml-4">
+                                  {p.code_arbre}: {getAlertDetails(p).filter(a => a.level === "critique").map(a => a.message).join(", ")}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          {attentions.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-orange-600 dark:text-orange-400">🟠 ATTENTION ({attentions.length})</p>
+                              {attentions.map(p => (
+                                <p key={p.id} className="text-xs text-muted-foreground ml-4">
+                                  {p.code_arbre}: {getAlertDetails(p).filter(a => a.level === "attention").map(a => a.message).join(", ")}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left">
+                              {isCentral && <th className="p-2 w-8"><Checkbox checked={items.every(p => selectedIds.has(p.id))} onCheckedChange={() => toggleSelectDomaine(items)} /></th>}
+                              <th className="p-2 w-10">Alerte</th>
+                              <th className="p-2">Code arbre</th>
+                              <th className="p-2">Poids</th>
+                              <th className="p-2">Fruits</th>
+                              <th className="p-2 hidden sm:table-cell">Qualité</th>
+                              <th className="p-2 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map(p => (
+                              <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
+                                {isCentral && <td className="p-2"><Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} /></td>}
+                                <td className="p-2"><NiveauBadge niveau={(p as any).niveau_alerte} /></td>
+                                <td className="p-2">
+                                  <span className="font-mono font-semibold">{p.code_arbre}</span>
+                                  <span className="text-xs text-muted-foreground ml-1">({(p.varietes as any)?.code_variete})</span>
+                                </td>
+                                <td className="p-2">{p.poids_total_kg} kg</td>
+                                <td className="p-2">{p.nb_fruits_total}</td>
+                                <td className="p-2 hidden sm:table-cell">{p.qualite_globale || "—"}</td>
+                                <td className="p-2 text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewItem({ type: "production", data: p })}>
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    {isCentral && (
+                                      <>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-success" onClick={() => validateProdMutation.mutate({ ids: [p.id], status: "Validé" })} disabled={validateProdMutation.isPending}>
+                                          <CheckCircle className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setRejectIds([p.id])} disabled={validateProdMutation.isPending}>
+                                          <XCircle className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Domain footer stats */}
+                      {isCentral && (
+                        <div className="flex flex-wrap gap-3 pt-2">
+                          <Button size="sm" variant="outline" onClick={() => toggleSelectDomaine(items)}>
+                            Sélectionner domaine
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const okIds = items.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).map(p => p.id);
+                              if (okIds.length > 0) validateProdMutation.mutate({ ids: okIds, status: "Validé" });
+                            }}
+                            disabled={validateProdMutation.isPending}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" /> Valider OK ({items.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).length})
+                          </Button>
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground flex flex-wrap gap-4">
+                        <span>Production totale : {totalKg.toFixed(1)} kg</span>
+                        <span>Qualité A+B : {items.filter(p => p.qualite_globale === "A" || p.qualite_globale === "B").length}/{items.length}</span>
                       </div>
                     </div>
-                  </CardContent>
+                  </CollapsibleContent>
                 </Card>
-              ))}
-            </div>
-          ))}
-          {pendingProd.length === 0 && <p className="text-center text-muted-foreground py-12">Aucune production en attente</p>}
+              </Collapsible>
+            );
+          })}
+
+          {filteredProd.length === 0 && <p className="text-center text-muted-foreground py-12">Aucune production en attente</p>}
         </TabsContent>
 
+        {/* ═══════════ QUALITÉ TAB ═══════════ */}
         <TabsContent value="qualite" className="space-y-4 mt-4">
           {Object.entries(groupedQualite).map(([domaine, items]) => (
             <div key={domaine} className="space-y-3">
@@ -193,31 +478,26 @@ export default function Validation() {
                           <span>Acidité {a.acidite_gl} g/L</span>
                           <EaBadgeInline value={a.ratio_ea} />
                         </div>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span>% Jus: {a.pct_jus ?? "-"}</span>
-                          <span>Pépins moy: {a.moyenne_pepins_par_fruit?.toFixed(1) ?? "-"}</span>
-                        </div>
                         <div className="flex gap-2 flex-wrap">
                           {a.alerte_ea_faible && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />E/A faible</Badge>}
                           {a.alerte_brix_hors_norme && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Brix hors norme</Badge>}
-                          {a.alerte_granulation_severe && <Badge className="bg-warning/20 text-warning text-xs">Granulation sévère</Badge>}
                           {a.maturite_optimale && <Badge className="bg-success/20 text-success text-xs">✅ Maturité optimale</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground">Technicien: {a.technicien_nom}</p>
-                        {a.photo_fruits_coupes_url && (
-                          <img src={a.photo_fruits_coupes_url} alt="Photo" className="mt-2 rounded max-h-20 object-cover" />
-                        )}
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setViewItem({ type: "qualite", data: a })}>
                           <Eye className="h-4 w-4 mr-1" /> Consulter
                         </Button>
-                        <Button size="sm" onClick={() => validateQualiteMutation.mutate({ id: a.id, status: "Validé" })} disabled={validateQualiteMutation.isPending}>
-                          <CheckCircle className="h-4 w-4 mr-1" /> Valider
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => { setRejectId(a.id); setRejectType("qualite"); }} disabled={validateQualiteMutation.isPending}>
-                          <XCircle className="h-4 w-4 mr-1" /> Rejeter
-                        </Button>
+                        {isCentral && (
+                          <>
+                            <Button size="sm" onClick={() => validateQualiteMutation.mutate({ id: a.id, status: "Validé" })} disabled={validateQualiteMutation.isPending}>
+                              <CheckCircle className="h-4 w-4 mr-1" /> Valider
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => setRejectIds([a.id])} disabled={validateQualiteMutation.isPending}>
+                              <XCircle className="h-4 w-4 mr-1" /> Rejeter
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -229,19 +509,47 @@ export default function Validation() {
         </TabsContent>
       </Tabs>
 
-      {/* Reject Dialog */}
-      <Dialog open={rejectId !== null} onOpenChange={() => setRejectId(null)}>
+      {/* ═══════════ REJECT DIALOG ═══════════ */}
+      <Dialog open={rejectIds.length > 0} onOpenChange={() => { setRejectIds([]); setRejectReasons([]); setRejectComment(""); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Rejeter {rejectType === "production" ? "la production" : "l'analyse qualité"}</DialogTitle></DialogHeader>
-          <Textarea placeholder="Raison du rejet..." value={rejectComment} onChange={(e) => setRejectComment(e.target.value)} />
+          <DialogHeader>
+            <DialogTitle>Rejeter {rejectIds.length > 1 ? `${rejectIds.length} éléments` : "l'élément"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Raisons du rejet</Label>
+              {REJECT_REASONS.map(reason => (
+                <div key={reason} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={rejectReasons.includes(reason)}
+                    onCheckedChange={(checked) => {
+                      setRejectReasons(prev => checked ? [...prev, reason] : prev.filter(r => r !== reason));
+                    }}
+                  />
+                  <span className="text-sm">{reason}</span>
+                </div>
+              ))}
+            </div>
+            <Textarea
+              placeholder="Commentaire additionnel..."
+              value={rejectComment}
+              onChange={(e) => setRejectComment(e.target.value)}
+            />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectId(null)}>Annuler</Button>
-            <Button variant="destructive" onClick={handleReject}>Confirmer le rejet</Button>
+            <Button variant="outline" onClick={() => { setRejectIds([]); setRejectReasons([]); setRejectComment(""); }}>Annuler</Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={rejectReasons.length === 0 && !rejectComment.trim()}
+            >
+              Confirmer le rejet
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Consulter Dialog */}
+      {/* ═══════════ VIEW DIALOG ═══════════ */}
       <Dialog open={viewItem !== null} onOpenChange={() => setViewItem(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -253,8 +561,20 @@ export default function Validation() {
 
           {viewItem?.type === "production" && (() => {
             const p = viewItem.data;
+            const alerts = getAlertDetails(p);
             return (
               <div className="space-y-3">
+                {/* Alerts section */}
+                {alerts.length > 0 && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1">
+                    <p className="text-xs font-semibold text-destructive flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Alertes</p>
+                    {alerts.map((a, i) => (
+                      <p key={i} className="text-xs text-muted-foreground">
+                        {a.level === "critique" ? "🔴" : a.level === "attention" ? "🟠" : "🟡"} {a.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Identification</p>
                   <DetailRow label="Domaine" value={(p.domaines as any)?.nom} />
@@ -279,6 +599,7 @@ export default function Validation() {
                   <DetailRow label="Calibre moyen" value={p.calibre_moyen_mm ? `${p.calibre_moyen_mm} mm` : "—"} />
                   <DetailRow label="Qualité globale" value={p.qualite_globale || "—"} />
                   <DetailRow label="Taux déclassement" value={p.taux_declassement_pct != null ? `${p.taux_declassement_pct}%` : "—"} />
+                  <DetailRow label="Niveau alerte" value={<NiveauBadge niveau={(p as any).niveau_alerte} />} />
                 </div>
                 {p.observations && (
                   <>
@@ -324,17 +645,11 @@ export default function Validation() {
                   <DetailRow label="Acidité" value={`${a.acidite_gl} g/L`} />
                   <DetailRow label="Ratio E/A" value={<EaBadgeInline value={a.ratio_ea} />} />
                   <DetailRow label="% Jus" value={a.pct_jus != null ? `${a.pct_jus}%` : "—"} />
-                  <DetailRow label="Volume jus" value={a.volume_jus_ml != null ? `${a.volume_jus_ml} mL` : "—"} />
-                  <DetailRow label="Poids jus" value={a.poids_jus_g != null ? `${a.poids_jus_g} g` : "—"} />
-                  <DetailRow label="Volume NaOH" value={a.volume_naoh_ml != null ? `${a.volume_naoh_ml} mL` : "—"} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Fermeté & Pépins</p>
                   <DetailRow label="Fermeté fruit" value={a.moyenne_fermete_fruit_kg_cm2 != null ? `${a.moyenne_fermete_fruit_kg_cm2} kg/cm²` : "—"} />
-                  <DetailRow label="Fermeté peau" value={a.moyenne_fermete_peau_kg_cm2 != null ? `${a.moyenne_fermete_peau_kg_cm2} kg/cm²` : "—"} />
-                  <DetailRow label="Pépins total" value={a.nb_pepins_echantillon_total ?? "—"} />
-                  <DetailRow label="Fruits avec pépins" value={a.nb_fruits_avec_pepins ?? "—"} />
                   <DetailRow label="Pépins moy/fruit" value={a.moyenne_pepins_par_fruit?.toFixed(1) ?? "—"} />
                 </div>
                 <Separator />
@@ -364,7 +679,6 @@ export default function Validation() {
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Photo fruits coupés</p>
                       <img src={a.photo_fruits_coupes_url} alt={a.photo_legende || "Photo"} className="rounded-lg max-h-48 object-cover" />
-                      {a.photo_legende && <p className="text-xs text-muted-foreground mt-1">{a.photo_legende}</p>}
                     </div>
                   </>
                 )}

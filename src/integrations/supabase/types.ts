@@ -416,6 +416,11 @@ export type Database = {
       }
       production: {
         Row: {
+          alerte_declassement_critique: boolean | null
+          alerte_fruits_anormal: boolean | null
+          alerte_poids_aberrant: boolean | null
+          alerte_poids_critique: boolean | null
+          alerte_poids_moyen_anormal: boolean | null
           arbre_inclus_calculs: boolean
           arbre_statut: string
           calibre_moyen_mm: number | null
@@ -429,6 +434,7 @@ export type Database = {
           is_offline_draft: boolean | null
           ligne_numero: number
           nb_fruits_total: number
+          niveau_alerte: string | null
           observations: string | null
           photo_legende: string | null
           photo_url: string | null
@@ -445,6 +451,11 @@ export type Database = {
           variete_id: number
         }
         Insert: {
+          alerte_declassement_critique?: boolean | null
+          alerte_fruits_anormal?: boolean | null
+          alerte_poids_aberrant?: boolean | null
+          alerte_poids_critique?: boolean | null
+          alerte_poids_moyen_anormal?: boolean | null
           arbre_inclus_calculs?: boolean
           arbre_statut?: string
           calibre_moyen_mm?: number | null
@@ -458,6 +469,7 @@ export type Database = {
           is_offline_draft?: boolean | null
           ligne_numero: number
           nb_fruits_total: number
+          niveau_alerte?: string | null
           observations?: string | null
           photo_legende?: string | null
           photo_url?: string | null
@@ -474,6 +486,11 @@ export type Database = {
           variete_id: number
         }
         Update: {
+          alerte_declassement_critique?: boolean | null
+          alerte_fruits_anormal?: boolean | null
+          alerte_poids_aberrant?: boolean | null
+          alerte_poids_critique?: boolean | null
+          alerte_poids_moyen_anormal?: boolean | null
           arbre_inclus_calculs?: boolean
           arbre_statut?: string
           calibre_moyen_mm?: number | null
@@ -487,6 +504,7 @@ export type Database = {
           is_offline_draft?: boolean | null
           ligne_numero?: number
           nb_fruits_total?: number
+          niveau_alerte?: string | null
           observations?: string | null
           photo_legende?: string | null
           photo_url?: string | null
@@ -752,6 +770,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seuils_qualite: {
+        Row: {
+          code_variete: string
+          created_at: string | null
+          declassement_acceptable: number | null
+          declassement_critique: number | null
+          fruits_max: number | null
+          fruits_min: number | null
+          id: number
+          poids_critique: number | null
+          poids_max: number | null
+          poids_min: number | null
+          poids_moy_max: number | null
+          poids_moy_min: number | null
+          poids_moy_optimal_max: number | null
+          poids_moy_optimal_min: number | null
+          poids_optimal_max: number | null
+          poids_optimal_min: number | null
+        }
+        Insert: {
+          code_variete: string
+          created_at?: string | null
+          declassement_acceptable?: number | null
+          declassement_critique?: number | null
+          fruits_max?: number | null
+          fruits_min?: number | null
+          id?: number
+          poids_critique?: number | null
+          poids_max?: number | null
+          poids_min?: number | null
+          poids_moy_max?: number | null
+          poids_moy_min?: number | null
+          poids_moy_optimal_max?: number | null
+          poids_moy_optimal_min?: number | null
+          poids_optimal_max?: number | null
+          poids_optimal_min?: number | null
+        }
+        Update: {
+          code_variete?: string
+          created_at?: string | null
+          declassement_acceptable?: number | null
+          declassement_critique?: number | null
+          fruits_max?: number | null
+          fruits_min?: number | null
+          id?: number
+          poids_critique?: number | null
+          poids_max?: number | null
+          poids_min?: number | null
+          poids_moy_max?: number | null
+          poids_moy_min?: number | null
+          poids_moy_optimal_max?: number | null
+          poids_moy_optimal_min?: number | null
+          poids_optimal_max?: number | null
+          poids_optimal_min?: number | null
+        }
+        Relationships: []
       }
       types_varietes: {
         Row: {
