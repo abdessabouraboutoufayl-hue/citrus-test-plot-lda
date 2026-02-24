@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { PlusCircle, Search, Download, Upload, Trash2, Eye, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Search, Download, Upload, Trash2, Eye, ArrowUpDown, ChevronLeft, ChevronRight, ArrowDownToLine } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -89,6 +89,18 @@ export default function QualiteList() {
       queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
       toast.success("Analyse supprimée");
       setDeleteItem(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("qualite_interne").update({ statut_validation: "Soumis" }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
+      toast.success("Analyse soumise pour validation");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -297,6 +309,11 @@ export default function QualiteList() {
                       <Button variant="ghost" size="icon" onClick={() => setViewItem(a)} title="Consulter">
                         <Eye className="h-4 w-4" />
                       </Button>
+                      {a.statut_validation === "Brouillon" && canModify(a) && (
+                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(a.id)} title="Soumettre" disabled={submitMutation.isPending}>
+                          <ArrowDownToLine className="h-4 w-4 text-success" />
+                        </Button>
+                      )}
                       {canDelete(a) && (
                         <Button variant="ghost" size="icon" onClick={() => setDeleteItem(a)} title="Supprimer">
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -329,6 +346,11 @@ export default function QualiteList() {
                 <div><span className="text-muted-foreground">% Jus</span><br />{a.pct_jus != null ? Math.round(a.pct_jus) : "-"}</div>
               </div>
               <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                {a.statut_validation === "Brouillon" && canModify(a) && (
+                  <Button variant="ghost" size="sm" onClick={() => submitMutation.mutate(a.id)} disabled={submitMutation.isPending}>
+                    <ArrowDownToLine className="h-3.5 w-3.5 mr-1 text-success" /> Soumettre
+                  </Button>
+                )}
                 {canDelete(a) && (
                   <Button variant="ghost" size="sm" onClick={() => setDeleteItem(a)}>
                     <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
@@ -470,6 +492,11 @@ export default function QualiteList() {
             </div>
           )}
           <DialogFooter className="flex gap-2 sm:gap-0">
+            {viewItem && viewItem.statut_validation === "Brouillon" && canModify(viewItem) && (
+              <Button onClick={() => { submitMutation.mutate(viewItem.id); setViewItem(null); }} className="bg-success hover:bg-success/90 text-success-foreground" disabled={submitMutation.isPending}>
+                <ArrowDownToLine className="h-4 w-4 mr-1" /> Soumettre
+              </Button>
+            )}
             {viewItem && canModify(viewItem) && (
               <Button variant="outline" asChild>
                 <Link to={`/qualite/edit/${viewItem.id}`}>Modifier</Link>
