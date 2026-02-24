@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,8 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
+import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 import * as XLSX from "xlsx";
 
 const statusColors: Record<string, string> = {
@@ -20,28 +25,53 @@ const statusColors: Record<string, string> = {
   Rejeté: "bg-destructive/20 text-destructive",
 };
 
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-start py-1.5">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-right max-w-[60%]">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function fmtDate(d: string | null | undefined) {
+  if (!d) return "—";
+  try { return format(new Date(d), "dd/MM/yyyy", { locale: fr }); } catch { return d; }
+}
+
+const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+type SortKey = "arbre" | "variete" | "pg" | "poids" | "fruits" | "poids_moy" | "date" | "statut";
+type SortDir = "asc" | "desc";
+
 export default function ProductionList() {
   const { userInfo } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
+  const [moisFilter, setMoisFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [viewItem, setViewItem] = useState<any>(null);
+  const [deleteItem, setDeleteItem] = useState<any>(null);
+
   const canSubmit = (p: any) => {
     if (userInfo.role === "direction") return false;
     return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
   };
-
   const canModify = (p: any) => {
     if (userInfo.role === "direction") return false;
     return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
   };
-
   const canDelete = (p: any) => {
     if (userInfo.role === "direction") return false;
     return p.statut_validation === "Brouillon";
   };
 
   const { data: productions = [], isLoading } = useQuery({
-    queryKey: ["productions", userInfo.domaineId, statutFilter],
+    queryKey: ["productions", userInfo.domaineId],
     queryFn: async () => {
       let query = supabase
         .from("production")
@@ -50,7 +80,6 @@ export default function ProductionList() {
       if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
         query = query.eq("domaine_id", userInfo.domaineId);
       }
-      if (statutFilter !== "all") query = query.eq("statut_validation", statutFilter);
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
@@ -65,7 +94,9 @@ export default function ProductionList() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productions"] });
       toast.success("Production supprimée");
+      setDeleteItem(null);
     },
+    onError: (err: any) => toast.error(err.message),
   });
 
   const submitMutation = useMutation({
@@ -80,18 +111,70 @@ export default function ProductionList() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const filtered = productions.filter((p) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      p.code_arbre?.toLowerCase().includes(s) ||
-      (p.varietes as any)?.code_variete?.toLowerCase().includes(s) ||
-      (p.varietes as any)?.nom_commercial?.toLowerCase().includes(s)
-    );
-  });
+  // Filtering
+  const filtered = useMemo(() => {
+    return productions.filter((p: any) => {
+      if (search) {
+        const s = search.toLowerCase();
+        const match = p.code_arbre?.toLowerCase().includes(s) ||
+          (p.varietes as any)?.code_variete?.toLowerCase().includes(s) ||
+          (p.varietes as any)?.nom_commercial?.toLowerCase().includes(s);
+        if (!match) return false;
+      }
+      if (statutFilter !== "all" && p.statut_validation !== statutFilter) return false;
+      if (moisFilter !== "all") {
+        const m = new Date(p.date_recolte).getMonth() + 1;
+        if (m !== parseInt(moisFilter)) return false;
+      }
+      return true;
+    });
+  }, [productions, search, statutFilter, moisFilter]);
+
+  // Sorting
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+    arr.sort((a: any, b: any) => {
+      let va: any, vb: any;
+      switch (sortKey) {
+        case "arbre": va = a.code_arbre || ""; vb = b.code_arbre || ""; break;
+        case "variete": va = (a.varietes as any)?.code_variete || ""; vb = (b.varietes as any)?.code_variete || ""; break;
+        case "pg": va = (a.porte_greffes as any)?.code_pg || ""; vb = (b.porte_greffes as any)?.code_pg || ""; break;
+        case "poids": va = a.poids_total_kg ?? 0; vb = b.poids_total_kg ?? 0; break;
+        case "fruits": va = a.nb_fruits_total ?? 0; vb = b.nb_fruits_total ?? 0; break;
+        case "poids_moy": va = a.poids_moyen_fruit_g ?? 0; vb = b.poids_moyen_fruit_g ?? 0; break;
+        case "date": va = a.date_recolte || ""; vb = b.date_recolte || ""; break;
+        case "statut": va = a.statut_validation || ""; vb = b.statut_validation || ""; break;
+        default: va = a.date_recolte || ""; vb = b.date_recolte || "";
+      }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
+  const paginated = sorted.slice((page - 1) * perPage, page * perPage);
+  useMemo(() => { setPage(1); }, [search, statutFilter, moisFilter]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const SortHeader = ({ label, k, className }: { label: string; k: SortKey; className?: string }) => (
+    <TableHead className={`cursor-pointer select-none ${className || ""}`} onClick={() => toggleSort(k)}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+      </span>
+    </TableHead>
+  );
 
   const exportExcel = () => {
-    const rows = filtered.map((p) => ({
+    const rows = filtered.map((p: any) => ({
       Domaine: (p.domaines as any)?.nom,
       "Code Domaine": (p.domaines as any)?.code,
       Arbre: p.code_arbre,
@@ -112,27 +195,20 @@ export default function ProductionList() {
       Récoltant: p.recoltant_nom,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-
-    // Style header
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws[addr]) {
-        ws[addr].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2E7D32" } } };
-      }
+      if (ws[addr]) ws[addr].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2E7D32" } } };
     }
-    // Freeze panes
-    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Production");
     XLSX.writeFile(wb, `Production_${new Date().toISOString().split("T")[0]}.xlsx`);
     toast.success("Export Excel téléchargé");
   };
 
-
   return (
     <div className="space-y-4">
+      {/* ═══ HEADER ═══ */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Productions</h1>
         <div className="flex gap-2">
@@ -150,79 +226,86 @@ export default function ProductionList() {
         </div>
       </div>
 
+      {/* ═══ FILTERS ═══ */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statutFilter} onValueChange={setStatutFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Statut" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Statut" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous</SelectItem>
+            <SelectItem value="all">Tous statuts</SelectItem>
             <SelectItem value="Brouillon">Brouillon</SelectItem>
             <SelectItem value="Soumis">Soumis</SelectItem>
             <SelectItem value="Validé">Validé</SelectItem>
             <SelectItem value="Rejeté">Rejeté</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={moisFilter} onValueChange={setMoisFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Mois" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous mois</SelectItem>
+            {MONTHS.map((m, i) => (
+              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Desktop table */}
+      {/* ═══ DESKTOP TABLE ═══ */}
       <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Arbre</TableHead>
-              <TableHead>Variété</TableHead>
-              <TableHead>PG</TableHead>
-              <TableHead className="text-right">Poids (kg)</TableHead>
-              <TableHead className="text-right">Fruits</TableHead>
-              <TableHead className="text-right">Poids moy (g)</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead></TableHead>
+              <SortHeader label="Arbre" k="arbre" />
+              <SortHeader label="Variété" k="variete" />
+              <SortHeader label="PG" k="pg" />
+              <SortHeader label="Poids (kg)" k="poids" className="text-right" />
+              <SortHeader label="Fruits" k="fruits" className="text-right" />
+              <SortHeader label="Poids moy (g)" k="poids_moy" className="text-right" />
+              <SortHeader label="Date" k="date" />
+              <SortHeader label="Statut" k="statut" />
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : filtered.length === 0 ? (
+            ) : paginated.length === 0 ? (
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Aucune production</TableCell></TableRow>
             ) : (
-              filtered.map((p) => (
+              paginated.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.code_arbre}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge>
-                  </TableCell>
+                  <TableCell><Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge></TableCell>
                   <TableCell>{(p.porte_greffes as any)?.code_pg}</TableCell>
                   <TableCell className="text-right">{p.poids_total_kg}</TableCell>
                   <TableCell className="text-right">{p.nb_fruits_total}</TableCell>
                   <TableCell className="text-right">{p.poids_moyen_fruit_g?.toFixed(1)}</TableCell>
-                  <TableCell>{new Date(p.date_recolte).toLocaleDateString("fr-FR")}</TableCell>
+                  <TableCell>{fmtDate(p.date_recolte)}</TableCell>
+                  <TableCell><Badge className={statusColors[p.statut_validation || "Brouillon"]}>{p.statut_validation}</Badge></TableCell>
                   <TableCell>
-                    <Badge className={statusColors[p.statut_validation || "Brouillon"]}>
-                      {p.statut_validation}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="flex gap-1">
-                    {canSubmit(p) && (
-                      <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre">
-                        <Send className="h-4 w-4 text-success" />
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setViewItem(p)} title="Consulter">
+                        <Eye className="h-4 w-4" />
                       </Button>
-                    )}
-                    {canModify(p) && (
-                      <Button variant="ghost" size="icon" asChild title="Modifier">
-                        <Link to={`/production/edit/${p.id}`}><Pencil className="h-4 w-4 text-primary" /></Link>
-                      </Button>
-                    )}
-                    {canDelete(p) && (
-                      <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} title="Supprimer">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
+                      {canSubmit(p) && (
+                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre" disabled={submitMutation.isPending}>
+                          <Send className="h-4 w-4 text-success" />
+                        </Button>
+                      )}
+                      {canModify(p) && (
+                        <Button variant="ghost" size="icon" asChild title="Modifier">
+                          <Link to={`/production/edit/${p.id}`}><Pencil className="h-4 w-4 text-primary" /></Link>
+                        </Button>
+                      )}
+                      {canDelete(p) && (
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteItem(p)} title="Supprimer">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -231,10 +314,10 @@ export default function ProductionList() {
         </Table>
       </div>
 
-      {/* Mobile cards */}
+      {/* ═══ MOBILE CARDS ═══ */}
       <div className="md:hidden space-y-3">
-        {filtered.map((p) => (
-          <Card key={p.id}>
+        {paginated.map((p: any) => (
+          <Card key={p.id} className="cursor-pointer" onClick={() => setViewItem(p)}>
             <CardContent className="pt-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
@@ -248,29 +331,164 @@ export default function ProductionList() {
                 <div><span className="text-muted-foreground">Fruits</span><br />{p.nb_fruits_total}</div>
                 <div><span className="text-muted-foreground">Qualité</span><br />{p.qualite_globale || "-"}</div>
               </div>
-              {(canSubmit(p) || canModify(p) || canDelete(p)) && (
-                <div className="flex gap-2 pt-1">
-                  {canSubmit(p) && (
-                    <Button variant="outline" size="sm" onClick={() => submitMutation.mutate(p.id)}>
-                      <Send className="h-3.5 w-3.5 mr-1 text-success" /> Soumettre
-                    </Button>
-                  )}
-                  {canModify(p) && (
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link to={`/production/edit/${p.id}`}><Pencil className="h-3.5 w-3.5 mr-1" /> Modifier</Link>
-                    </Button>
-                  )}
-                  {canDelete(p) && (
-                    <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(p.id)}>
-                      <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
-                    </Button>
-                  )}
-                </div>
-              )}
+              <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                {canSubmit(p) && (
+                  <Button variant="ghost" size="sm" onClick={() => submitMutation.mutate(p.id)} disabled={submitMutation.isPending}>
+                    <Send className="h-3.5 w-3.5 mr-1 text-success" /> Soumettre
+                  </Button>
+                )}
+                {canModify(p) && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to={`/production/edit/${p.id}`}><Pencil className="h-3.5 w-3.5 mr-1" /> Modifier</Link>
+                  </Button>
+                )}
+                {canDelete(p) && (
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteItem(p)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* ═══ PAGINATION FOOTER ═══ */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>{sorted.length} résultats</span>
+          <span>•</span>
+          <span>Afficher</span>
+          <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
+            <SelectTrigger className="w-[70px] h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+          <span>par page</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+            <ChevronLeft className="h-4 w-4" /> Précédent
+          </Button>
+          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+            const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+            const n = start + i;
+            if (n > totalPages) return null;
+            return (
+              <Button key={n} variant={n === page ? "default" : "outline"} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(n)}>
+                {n}
+              </Button>
+            );
+          })}
+          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+            Suivant <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* ═══ DETAIL MODAL ═══ */}
+      <Dialog open={!!viewItem} onOpenChange={(open) => !open && setViewItem(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Détails Production</DialogTitle>
+          </DialogHeader>
+          {viewItem && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Identification</h3>
+                <DetailRow label="Code arbre" value={viewItem.code_arbre} />
+                <DetailRow label="Variété" value={<Badge variant="outline">{(viewItem.varietes as any)?.code_variete}</Badge>} />
+                <DetailRow label="Nom commercial" value={(viewItem.varietes as any)?.nom_commercial} />
+                <DetailRow label="Porte-greffe" value={(viewItem.porte_greffes as any)?.code_pg} />
+                <DetailRow label="Domaine" value={(viewItem.domaines as any)?.nom} />
+              </div>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Position</h3>
+                <DetailRow label="Ligne" value={viewItem.ligne_numero} />
+                <DetailRow label="Position" value={viewItem.position_ligne} />
+                <DetailRow label="Statut arbre" value={viewItem.arbre_statut} />
+              </div>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Récolte</h3>
+                <DetailRow label="Date récolte" value={fmtDate(viewItem.date_recolte)} />
+                <DetailRow label="Poids total (kg)" value={viewItem.poids_total_kg} />
+                <DetailRow label="Nb fruits" value={viewItem.nb_fruits_total} />
+                <DetailRow label="Poids moyen (g)" value={viewItem.poids_moyen_fruit_g?.toFixed(1)} />
+                <DetailRow label="Calibre moyen (mm)" value={viewItem.calibre_moyen_mm} />
+                <DetailRow label="Taux déclassement (%)" value={viewItem.taux_declassement_pct} />
+                <DetailRow label="Qualité globale" value={viewItem.qualite_globale} />
+              </div>
+              {viewItem.photo_url && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">Photo</h3>
+                    <img src={viewItem.photo_url} alt="Production" className="rounded-md max-h-48 w-auto" />
+                    {viewItem.photo_legende && <p className="text-xs text-muted-foreground mt-1">{viewItem.photo_legende}</p>}
+                  </div>
+                </>
+              )}
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Informations</h3>
+                <DetailRow label="Récoltant" value={viewItem.recoltant_nom} />
+                <DetailRow label="Observations" value={viewItem.observations || "—"} />
+              </div>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Workflow</h3>
+                <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statut_validation || "Brouillon"]}>{viewItem.statut_validation}</Badge>} />
+                <DetailRow label="Commentaires" value={viewItem.commentaires_validation || "—"} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            {viewItem && canSubmit(viewItem) && (
+              <Button onClick={() => { submitMutation.mutate(viewItem.id); setViewItem(null); }} className="bg-success hover:bg-success/90 text-success-foreground" disabled={submitMutation.isPending}>
+                <Send className="h-4 w-4 mr-1" /> Soumettre
+              </Button>
+            )}
+            {viewItem && canModify(viewItem) && (
+              <Button variant="outline" asChild>
+                <Link to={`/production/edit/${viewItem.id}`}><Pencil className="h-4 w-4 mr-1" /> Modifier</Link>
+              </Button>
+            )}
+            {viewItem && canDelete(viewItem) && (
+              <Button variant="destructive" onClick={() => { setViewItem(null); setDeleteItem(viewItem); }}>
+                Supprimer
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setViewItem(null)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ DELETE CONFIRMATION ═══ */}
+      <AlertDialog open={!!deleteItem} onOpenChange={(open) => !open && setDeleteItem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Supprimer la production {deleteItem?.code_arbre} du {deleteItem ? fmtDate(deleteItem.date_recolte) : ""} ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteItem && deleteMutation.mutate(deleteItem.id)}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
