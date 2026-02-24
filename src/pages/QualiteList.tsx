@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Download, Trash2 } from "lucide-react";
+import { PlusCircle, Search, Download, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -59,6 +59,19 @@ export default function QualiteList() {
       queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
       toast.success("Analyse supprimée");
     },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("qualite_interne").update({ statut_validation: "Soumis" }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
+      toast.success("Analyse soumise pour validation");
+    },
+    onError: (err: any) => toast.error(err.message),
   });
 
   const filtered = analyses.filter((a: any) => {
@@ -165,9 +178,16 @@ export default function QualiteList() {
                   <TableCell className="text-right">{a.moyenne_pepins_par_fruit?.toFixed(1) ?? "-"}</TableCell>
                   <TableCell>{new Date(a.date_analyse).toLocaleDateString("fr-FR")}</TableCell>
                   <TableCell><Badge className={statusColors[a.statut_validation || "Brouillon"]}>{a.statut_validation}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className="flex gap-1">
                     {a.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
-                      <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(a.id)} title="Soumettre">
+                          <Send className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(a.id)} title="Supprimer">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
                     )}
                   </TableCell>
                 </TableRow>
@@ -194,6 +214,16 @@ export default function QualiteList() {
                 <div><span className="text-muted-foreground">E/A</span><br /><EaBadgeInline value={a.ratio_ea} /></div>
                 <div><span className="text-muted-foreground">% Jus</span><br />{a.pct_jus ?? "-"}</div>
               </div>
+              {a.statut_validation === "Brouillon" && userInfo.role !== "direction" && (
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={() => submitMutation.mutate(a.id)}>
+                    <Send className="h-3.5 w-3.5 mr-1" /> Soumettre
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(a.id)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
