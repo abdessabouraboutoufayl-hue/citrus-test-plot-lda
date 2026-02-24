@@ -26,8 +26,6 @@ import AnalysesCroisees from "@/pages/AnalysesCroisees";
 import AnalyticsExports from "@/pages/AnalyticsExports";
 import AnalyticsRapportsAuto from "@/pages/AnalyticsRapportsAuto";
 import ProductionSaisieVariete from "@/pages/ProductionSaisieVariete";
-import ProductionImport from "@/pages/ProductionImport";
-import ProductionConfigTemplate from "@/pages/ProductionConfigTemplate";
 
 const queryClient = new QueryClient();
 
@@ -52,8 +50,6 @@ function AppRoutes() {
         <Route path="/production" element={<ProductionList />} />
         <Route path="/production/new" element={<ProductionWizard />} />
         <Route path="/production/saisie-par-variete" element={<ProductionSaisieVariete />} />
-        <Route path="/production/import" element={<ProductionImport />} />
-        <Route path="/production/config-template" element={<ProductionConfigTemplate />} />
         <Route path="/production/dashboard" element={<Dashboard />} />
         <Route path="/qualite" element={<QualiteList />} />
         <Route path="/qualite/new" element={<QualiteWizard />} />
