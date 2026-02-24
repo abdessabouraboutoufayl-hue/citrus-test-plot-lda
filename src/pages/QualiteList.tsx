@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Download, Trash2, Send } from "lucide-react";
+import { PlusCircle, Search, Download, Trash2, Send, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -73,6 +73,20 @@ export default function QualiteList() {
     },
     onError: (err: any) => toast.error(err.message),
   });
+
+  const validateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const { error } = await supabase.from("qualite_interne").update({ statut_validation: status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
+      toast.success(status === "Validé" ? "Analyse validée" : "Analyse rejetée");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const canValidate = userInfo.role === "responsable_domaine" || userInfo.role === "responsable_central" || userInfo.role === "direction";
 
   const filtered = analyses.filter((a: any) => {
     if (!search) return true;
@@ -189,6 +203,16 @@ export default function QualiteList() {
                         </Button>
                       </>
                     )}
+                    {a.statut_validation === "Soumis" && canValidate && (
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => validateMutation.mutate({ id: a.id, status: "Validé" })} title="Valider">
+                          <CheckCircle className="h-4 w-4 text-success" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => validateMutation.mutate({ id: a.id, status: "Rejeté" })} title="Rejeter">
+                          <XCircle className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -221,6 +245,16 @@ export default function QualiteList() {
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(a.id)}>
                     <Trash2 className="h-3.5 w-3.5 mr-1 text-destructive" /> Supprimer
+                  </Button>
+                </div>
+              )}
+              {a.statut_validation === "Soumis" && canValidate && (
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="text-success border-success" onClick={() => validateMutation.mutate({ id: a.id, status: "Validé" })}>
+                    <CheckCircle className="h-3.5 w-3.5 mr-1" /> Valider
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => validateMutation.mutate({ id: a.id, status: "Rejeté" })}>
+                    <XCircle className="h-3.5 w-3.5 mr-1 text-destructive" /> Rejeter
                   </Button>
                 </div>
               )}
