@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Save, Check, Camera, Upload, AlertTriangle, Info } from "lucide-react";
 
 const schema = z.object({
-  domaine_id: z.number({ required_error: "Domaine requis" }),
+  domaine_id: z.number().optional().nullable(),
   campagne_id: z.number({ required_error: "Campagne requise" }),
   variete_id: z.number({ required_error: "Variété requise" }),
   porte_greffe_id: z.number({ required_error: "Porte-greffe requis" }),
@@ -158,7 +158,14 @@ export default function QualiteWizard() {
   });
 
   const onSubmit = (status: string) => {
-    form.handleSubmit((data) => submitMutation.mutate({ data, status }))();
+    form.handleSubmit(
+      (data) => submitMutation.mutate({ data, status }),
+      (errors) => {
+        console.error("Validation errors:", errors);
+        const firstError = Object.values(errors)[0];
+        toast.error(firstError?.message?.toString() || "Veuillez vérifier les champs obligatoires");
+      }
+    )();
   };
 
   const steps = ["Identification", "Jus", "Chimique", "Pépins & Fermeté", "Photo & Obs.", "Récapitulatif"];
