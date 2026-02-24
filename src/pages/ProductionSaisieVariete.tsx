@@ -518,7 +518,7 @@ export default function ProductionSaisieVariete() {
                               </div>
                             ) : (
                               <label className="cursor-pointer">
-                                <input type="file" accept="image/*" capture="environment" className="hidden"
+                                <input type="file" accept="image/*" className="hidden"
                                   onChange={e => { const f = e.target.files?.[0]; if (f) handleRowPhoto(row.id, f); e.target.value = ""; }} />
                                 <div className="h-8 w-8 rounded border border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
                                   <Camera className="h-3.5 w-3.5 text-muted-foreground" />
