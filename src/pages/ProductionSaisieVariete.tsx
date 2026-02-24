@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Save, Plus, Minus, Copy, TreePine, FileSpreadsheet } from "lucide-react";
+import { Save, Plus, Minus, Copy, TreePine, FileSpreadsheet, Camera, X } from "lucide-react";
+import imageCompression from "browser-image-compression";
 import ImportTemplateConfig from "@/components/production/ImportTemplateConfig";
 import ImportUploadPreview from "@/components/production/ImportUploadPreview";
 
@@ -31,6 +32,8 @@ interface RowData {
   calibre: number | null;
   qualite: string;
   statut: "Normal" | "Chétif" | "Manquant";
+  photo: File | null;
+  photoPreview: string | null;
 }
 
 const emptyRow = (id: number, pos: number): RowData => ({
@@ -42,6 +45,8 @@ const emptyRow = (id: number, pos: number): RowData => ({
   calibre: null,
   qualite: "A",
   statut: "Normal",
+  photo: null,
+  photoPreview: null,
 });
 
 export default function ProductionSaisieVariete() {
@@ -131,12 +136,29 @@ export default function ProductionSaisieVariete() {
       if (!source) return prev;
       const idx = prev.findIndex(r => r.id === id);
       const maxId = Math.max(...prev.map(r => r.id), 0) + 1;
-      const newRow = { ...source, id: maxId, position: source.position + 1 };
+      const newRow = { ...source, id: maxId, position: source.position + 1, photo: null, photoPreview: null };
       const result = [...prev];
       result.splice(idx + 1, 0, newRow);
       return result;
     });
     setNbArbres(prev => prev + 1);
+  }, []);
+
+  const handleRowPhoto = useCallback(async (rowId: number, file: File | null) => {
+    if (!file) {
+      setRows(prev => prev.map(r => r.id === rowId ? { ...r, photo: null, photoPreview: null } : r));
+      return;
+    }
+    try {
+      const compressed = await imageCompression(file, { maxSizeMB: 0.3, maxWidthOrHeight: 1920 });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRows(prev => prev.map(r => r.id === rowId ? { ...r, photo: compressed, photoPreview: reader.result as string } : r));
+      };
+      reader.readAsDataURL(compressed);
+    } catch {
+      setRows(prev => prev.map(r => r.id === rowId ? { ...r, photo: file, photoPreview: URL.createObjectURL(file) } : r));
+    }
   }, []);
 
   const handleNbArbresChange = useCallback((val: number) => {
@@ -208,6 +230,21 @@ export default function ProductionSaisieVariete() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!user || !effectiveDomaineId || !campagneId || !varieteId || !selectedPG) throw new Error("Données incomplètes");
+
+      // Upload photos first
+      const photoUrls: Record<number, string> = {};
+      for (const r of rows) {
+        if (r.photo) {
+          const ext = r.photo.name?.split(".").pop() || "jpg";
+          const path = `${user.id}/${Date.now()}_${r.id}.${ext}`;
+          const { error: uploadErr } = await supabase.storage.from("production-photos").upload(path, r.photo);
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage.from("production-photos").getPublicUrl(path);
+            photoUrls[r.id] = urlData.publicUrl;
+          }
+        }
+      }
+
       const allInserts = rows.map(r => ({
         domaine_id: effectiveDomaineId,
         campagne_id: campagneId,
@@ -224,6 +261,7 @@ export default function ProductionSaisieVariete() {
         user_id: user.id,
         arbre_statut: r.statut,
         arbre_inclus_calculs: r.statut === "Normal",
+        photo_url: photoUrls[r.id] || null,
       }));
       if (allInserts.length === 0) throw new Error("Aucune donnée");
       const { error } = await supabase.from("production").insert(allInserts);
@@ -400,17 +438,18 @@ export default function ProductionSaisieVariete() {
             <CardContent className="p-0 overflow-x-auto" ref={tableRef}>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">☑</TableHead>
-                    <TableHead className="w-20">Ligne</TableHead>
-                    <TableHead className="w-20">Position</TableHead>
-                    <TableHead>Poids (kg)</TableHead>
-                    <TableHead>Fruits</TableHead>
-                    <TableHead>Calibre (mm)</TableHead>
-                    <TableHead className="w-20">Qualité</TableHead>
-                    <TableHead className="w-28">Statut</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
+                   <TableRow>
+                     <TableHead className="w-10">☑</TableHead>
+                     <TableHead className="w-20">Ligne</TableHead>
+                     <TableHead className="w-20">Position</TableHead>
+                     <TableHead>Poids (kg)</TableHead>
+                     <TableHead>Fruits</TableHead>
+                     <TableHead>Calibre (mm)</TableHead>
+                     <TableHead className="w-20">Qualité</TableHead>
+                     <TableHead className="w-28">Statut</TableHead>
+                     <TableHead className="w-16">Photo</TableHead>
+                     <TableHead className="w-10"></TableHead>
+                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row, rowIdx) => {
@@ -466,6 +505,27 @@ export default function ProductionSaisieVariete() {
                               <SelectItem value="Manquant">Manquant</SelectItem>
                             </SelectContent>
                           </Select>
+                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {row.photoPreview ? (
+                              <div className="relative">
+                                <img src={row.photoPreview} alt="" className="h-8 w-8 rounded object-cover" />
+                                <button type="button" onClick={() => handleRowPhoto(row.id, null)}
+                                  className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="cursor-pointer">
+                                <input type="file" accept="image/*" capture="environment" className="hidden"
+                                  onChange={e => { const f = e.target.files?.[0]; if (f) handleRowPhoto(row.id, f); e.target.value = ""; }} />
+                                <div className="h-8 w-8 rounded border border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+                                  <Camera className="h-3.5 w-3.5 text-muted-foreground" />
+                                </div>
+                              </label>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Button type="button" variant="ghost" size="icon" className="h-8 w-8"
