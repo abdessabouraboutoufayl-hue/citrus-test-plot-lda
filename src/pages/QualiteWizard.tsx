@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -59,6 +59,8 @@ function EaBadge({ brix, acidite }: { brix?: number; acidite?: number }) {
 }
 
 export default function QualiteWizard() {
+  const { id: editId } = useParams<{ id: string }>();
+  const isEdit = !!editId;
   const [step, setStep] = useState(0);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -74,6 +76,52 @@ export default function QualiteWizard() {
       domaine_id: userInfo.domaineId || undefined,
     },
   });
+
+  // Load existing data in edit mode
+  const { data: existingData, isLoading: loadingEdit } = useQuery({
+    queryKey: ["qualite-edit", editId],
+    enabled: isEdit,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("qualite_interne")
+        .select("*")
+        .eq("id", Number(editId))
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (existingData) {
+      form.reset({
+        domaine_id: existingData.domaine_id,
+        campagne_id: existingData.campagne_id,
+        variete_id: existingData.variete_id,
+        porte_greffe_id: existingData.porte_greffe_id,
+        date_analyse: existingData.date_analyse,
+        nb_fruits_echantillon: existingData.nb_fruits_echantillon,
+        pct_jus: existingData.pct_jus,
+        poids_jus_g: existingData.poids_jus_g,
+        volume_jus_ml: existingData.volume_jus_ml,
+        brix_degres: existingData.brix_degres,
+        acidite_gl: existingData.acidite_gl,
+        volume_naoh_ml: existingData.volume_naoh_ml,
+        nb_pepins_echantillon_total: existingData.nb_pepins_echantillon_total,
+        nb_fruits_avec_pepins: existingData.nb_fruits_avec_pepins,
+        moyenne_fermete_peau_kg_cm2: existingData.moyenne_fermete_peau_kg_cm2,
+        moyenne_fermete_fruit_kg_cm2: existingData.moyenne_fermete_fruit_kg_cm2,
+        granulation_severe: existingData.granulation_severe as any,
+        granulation_legere: existingData.granulation_legere as any,
+        photo_legende: existingData.photo_legende || "",
+        technicien_nom: existingData.technicien_nom,
+        observations: existingData.observations || "",
+      });
+      if (existingData.photo_fruits_coupes_url) {
+        setPhotoPreview(existingData.photo_fruits_coupes_url);
+      }
+    }
+  }, [existingData]);
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
@@ -115,7 +163,7 @@ export default function QualiteWizard() {
       const domaineId = isCentral ? data.domaine_id : userInfo.domaineId;
       if (!domaineId) throw new Error("Domaine requis");
 
-      let photoUrl: string | null = null;
+      let photoUrl: string | null = existingData?.photo_fruits_coupes_url || null;
       if (photoFile) {
         const ext = photoFile.name.split(".").pop();
         const path = `qualite/${user.id}/${Date.now()}.${ext}`;
@@ -125,7 +173,7 @@ export default function QualiteWizard() {
         photoUrl = urlData.publicUrl;
       }
 
-      const { error } = await supabase.from("qualite_interne").insert({
+      const payload = {
         domaine_id: domaineId,
         campagne_id: data.campagne_id,
         variete_id: data.variete_id,
@@ -149,11 +197,18 @@ export default function QualiteWizard() {
         photo_legende: data.photo_legende || null,
         technicien_nom: data.technicien_nom,
         statut_validation: status,
-        user_id: user.id,
-      } as any);
-      if (error) throw error;
+      } as any;
+
+      if (isEdit) {
+        const { error } = await supabase.from("qualite_interne").update(payload).eq("id", Number(editId));
+        if (error) throw error;
+      } else {
+        payload.user_id = user.id;
+        const { error } = await supabase.from("qualite_interne").insert(payload);
+        if (error) throw error;
+      }
     },
-    onSuccess: () => { toast.success("Analyse qualité enregistrée"); navigate("/qualite"); },
+    onSuccess: () => { toast.success(isEdit ? "Analyse modifiée" : "Analyse qualité enregistrée"); navigate("/qualite"); },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -173,7 +228,8 @@ export default function QualiteWizard() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Nouvelle analyse qualité</h1>
+      <h1 className="text-2xl font-bold">{isEdit ? "Modifier l'analyse qualité" : "Nouvelle analyse qualité"}</h1>
+      {loadingEdit && isEdit && <p className="text-muted-foreground">Chargement...</p>}
 
       {/* Stepper */}
       <div className="flex items-center justify-center gap-1 flex-wrap">
