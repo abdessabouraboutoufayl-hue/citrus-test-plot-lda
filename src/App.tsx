@@ -53,6 +53,7 @@ function AppRoutes() {
         <Route path="/production/dashboard" element={<Dashboard />} />
         <Route path="/qualite" element={<QualiteList />} />
         <Route path="/qualite/new" element={<QualiteWizard />} />
+        <Route path="/qualite/edit/:id" element={<QualiteWizard />} />
         <Route path="/qualite/dashboard" element={<QualiteDashboard />} />
         <Route path="/phenologie/suivi" element={<PhenologieSuivi />} />
         <Route path="/phenologie/historique" element={<PhenologieHistorique />} />
