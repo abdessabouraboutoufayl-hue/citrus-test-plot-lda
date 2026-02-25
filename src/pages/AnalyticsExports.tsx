@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Download, FileSpreadsheet, FileText, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 type DataType = "Production" | "Qualité";
 

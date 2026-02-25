@@ -16,7 +16,7 @@ import { PlusCircle, Search, Download, Upload, Trash2, Eye, ArrowUpDown, Chevron
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 const statusColors: Record<string, string> = {
   Brouillon: "bg-muted text-muted-foreground",

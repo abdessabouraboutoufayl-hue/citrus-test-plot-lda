@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 interface Variete {
   id: number;
