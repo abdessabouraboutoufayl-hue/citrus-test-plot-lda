@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { Upload, Check, X, Image, Archive, Camera, ChevronDown, ChevronRight, FileSpreadsheet } from "lucide-react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import JSZip from "jszip";
 import imageCompression from "browser-image-compression";
 
