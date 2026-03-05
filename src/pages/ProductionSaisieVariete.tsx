@@ -199,6 +199,16 @@ export default function ProductionSaisieVariete() {
   }, [rows]);
 
   const selectedVariete = varietes.find(v => v.id === varieteId);
+  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const calibreEntries = getCalibreEntries(calibreType);
+  const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
+  const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON : true;
+  const hasNonNormalOnly = rows.every(r => r.statut !== "Normal");
+  const skipCalibre = hasNonNormalOnly;
+
+  const handleCalibreChange = useCallback((dbColumn: string, value: number) => {
+    setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
+  }, []);
 
   const tableRef = useRef<HTMLDivElement>(null);
   const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, colIdx: number) => {
