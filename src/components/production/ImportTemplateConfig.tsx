@@ -56,7 +56,6 @@ interface Props {
 }
 
 const OPTIONAL_COLUMNS = [
-  { key: "Calibre_mm", label: "Calibre" },
   { key: "Declassement_pct", label: "Déclassement" },
   { key: "Qualite", label: "Qualité" },
   { key: "Recoltant", label: "Récoltant" },
@@ -72,7 +71,8 @@ export default function ImportTemplateConfig({
 }: Props) {
   const [open, setOpen] = useState(true);
   const [selectedVarietes, setSelectedVarietes] = useState<Map<number, Set<number>>>(new Map());
-  const [optionalCols, setOptionalCols] = useState<Set<string>>(new Set(["Calibre_mm", "Qualite", "Statut"]));
+  const [optionalCols, setOptionalCols] = useState<Set<string>>(new Set(["Qualite", "Statut"]));
+  const [includeCalibres, setIncludeCalibres] = useState(true);
   const [nbArbresPerCombo, setNbArbresPerCombo] = useState(5);
 
   const currentDomaine = domaines.find(d => d.id === effectiveDomaineId);
@@ -155,11 +155,12 @@ export default function ImportTemplateConfig({
           Poids_kg: "",
           Fruits: "",
         };
-        // Calibre columns based on variety type
-        for (const ce of calEntries) {
-          row[ce.dbColumn.replace("cal_", "Cal_")] = "";
+        // Calibre columns based on variety type (if enabled)
+        if (includeCalibres) {
+          for (const ce of calEntries) {
+            row[ce.dbColumn.replace("cal_", "Cal_")] = "";
+          }
         }
-        if (optionalCols.has("Calibre_mm")) row["Calibre_mm"] = "";
         if (optionalCols.has("Declassement_pct")) row["Declassement_pct"] = "";
         if (optionalCols.has("Qualite")) row["Qualite"] = "A";
         if (optionalCols.has("Recoltant")) row["Recoltant"] = "";
@@ -309,6 +310,19 @@ export default function ImportTemplateConfig({
                   );
                 })}
               </div>
+            </div>
+
+            {/* Profil calibre */}
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Profil calibre (30 fruits)</h3>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={includeCalibres}
+                  onCheckedChange={(v) => setIncludeCalibres(!!v)}
+                />
+                Inclure profil calibre
+                <span className="text-xs text-muted-foreground">(colonnes dynamiques selon type variété)</span>
+              </label>
             </div>
 
             {/* Colonnes optionnelles */}
