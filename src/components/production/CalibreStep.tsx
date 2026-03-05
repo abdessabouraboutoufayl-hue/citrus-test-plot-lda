@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,19 @@ interface Props {
 
 export default function CalibreStep({ type, values, onChange, codeVariete, codePG }: Props) {
   const entries = useMemo(() => getCalibreEntries(type), [type]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = inputRefs.current[index + 1];
+      if (next) next.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = inputRefs.current[index - 1];
+      if (prev) prev.focus();
+    }
+  }, []);
 
   const total = useMemo(() => {
     return entries.reduce((sum, e) => sum + (values[e.dbColumn] || 0), 0);
@@ -63,7 +76,7 @@ export default function CalibreStep({ type, values, onChange, codeVariete, codeP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => {
+              {entries.map((entry, index) => {
                 const val = values[entry.dbColumn] || 0;
                 const pct = total > 0 ? ((val / NB_ECHANTILLON) * 100).toFixed(1) : "0.0";
                 return (
@@ -72,11 +85,13 @@ export default function CalibreStep({ type, values, onChange, codeVariete, codeP
                     <TableCell className="text-muted-foreground text-sm">{entry.range}</TableCell>
                     <TableCell>
                       <Input
+                        ref={(el) => { inputRefs.current[index] = el; }}
                         type="number"
                         min={0}
                         max={NB_ECHANTILLON}
                         value={val || ""}
                         onChange={(e) => onChange(entry.dbColumn, Math.max(0, Number(e.target.value) || 0))}
+                        onKeyDown={(e) => handleKeyDown(e, index)}
                         className="h-8 w-20"
                         placeholder="0"
                       />
