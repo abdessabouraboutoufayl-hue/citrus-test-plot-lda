@@ -446,6 +446,16 @@ export default function ProductionWizard() {
           )}
 
           {step === 2 && (
+            <CalibreStep
+              type={calibreType}
+              values={calibreValues}
+              onChange={handleCalibreChange}
+              codeVariete={selectedVariete?.code_variete}
+              codePG={porteGreffes.find(p => p.id === watchedValues.porte_greffe_id)?.code_pg}
+            />
+          )}
+
+          {step === 3 && (
             <Card>
               <CardHeader><CardTitle>Photo & Observations</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -476,7 +486,7 @@ export default function ProductionWizard() {
             </Card>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <Card>
               <CardHeader><CardTitle>Récapitulatif</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
@@ -505,8 +515,9 @@ export default function ProductionWizard() {
             <Button type="button" variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
               <ChevronLeft className="h-4 w-4 mr-1" /> Retour
             </Button>
-            {step < 3 ? (
-              <Button type="button" onClick={() => setStep((s) => s + 1)}>
+            {step < 4 ? (
+              <Button type="button" onClick={() => setStep((s) => s + 1)}
+                disabled={step === 2 && calibreType !== null && !calibreValid}>
                 Suivant <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
