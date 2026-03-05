@@ -622,6 +622,50 @@ export default function Validation() {
                     </div>
                   </>
                 )}
+                {/* ═══ CALIBRE SECTION ═══ */}
+                {(() => {
+                  const code = (p.varietes as any)?.code_variete;
+                  const pg = (p.porte_greffes as any)?.code_pg;
+                  const calType = code ? getCalibreType(code) : null;
+                  const entries = getCalibreEntries(calType);
+                  const hasData = entries.some(e => (p as any)[e.dbColumn] > 0);
+                  if (!hasData) return null;
+                  const chartData = entries
+                    .map(e => ({
+                      calibre: `${e.label} (${e.range})`,
+                      nb: (p as any)[e.dbColumn] || 0,
+                      pct: Math.round(((p as any)[e.dbColumn] || 0) / NB_ECHANTILLON * 100),
+                    }))
+                    .filter(d => d.nb > 0);
+                  return (
+                    <>
+                      <Separator />
+                      <Collapsible defaultOpen>
+                        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+                          <h3 className="text-xs text-muted-foreground font-semibold">📏 Profil Calibre ({NB_ECHANTILLON} fruits)</h3>
+                          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-2 space-y-2">
+                          <Badge variant="secondary" className="text-xs">ℹ️ Partagé : {code}-{pg}</Badge>
+                          <div className="h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
+                                <XAxis type="number" />
+                                <YAxis type="category" dataKey="calibre" width={80} tick={{ fontSize: 11 }} />
+                                <Tooltip formatter={(value: number, name: string, props: any) => [`${value} fruits (${props.payload.pct}%)`, "Quantité"]} />
+                                <Bar dataKey="nb" radius={[0, 4, 4, 0]}>
+                                  {chartData.map((_, idx) => (
+                                    <Cell key={idx} fill={getCalibreColor(idx, chartData.length)} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </>
+                  );
+                })()}
               </div>
             );
           })()}
