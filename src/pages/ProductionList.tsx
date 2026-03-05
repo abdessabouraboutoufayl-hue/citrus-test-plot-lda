@@ -80,6 +80,7 @@ export default function ProductionList() {
       let query = supabase
         .from("production")
         .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
+        .order("domaine_id", { ascending: true })
         .order("variete_id", { ascending: true })
         .order("porte_greffe_id", { ascending: true })
         .order("ligne_numero", { ascending: true })
@@ -281,15 +282,17 @@ export default function ProductionList() {
             ) : (
               (() => {
                 // Group paginated items by combo (variete + PG)
-                const comboRows: { comboKey: string; code: string; pg: string; hasCalibre: boolean; items: any[] }[] = [];
+                const comboRows: { comboKey: string; code: string; pg: string; domaineName: string; hasCalibre: boolean; items: any[] }[] = [];
                 let lastCombo = "";
                 for (const p of paginated) {
                   const code = (p.varietes as any)?.code_variete || "?";
                   const pg = (p.porte_greffes as any)?.code_pg || "?";
-                  const key = `${code}-${pg}`;
+                  const domCode = (p.domaines as any)?.code || "?";
+                  const domNom = (p.domaines as any)?.nom || domCode;
+                  const key = `${p.domaine_id}-${code}-${pg}`;
                   if (key !== lastCombo) {
                     const hasCal = p.cal_0 != null || p.cal_1xxx != null || p.cal_1xx != null || p.cal_2 != null;
-                    comboRows.push({ comboKey: key, code, pg, hasCalibre: hasCal, items: [] });
+                    comboRows.push({ comboKey: key, code, pg, domaineName: domNom, hasCalibre: hasCal, items: [] });
                     lastCombo = key;
                   }
                   comboRows[comboRows.length - 1].items.push(p);
@@ -299,7 +302,7 @@ export default function ProductionList() {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableCell colSpan={9} className="py-1.5">
                         <span className="font-semibold text-sm">
-                          📊 {group.code}-{group.pg} ({group.items.length} arbres)
+                          📊 {group.domaineName} — {group.code}-{group.pg} ({group.items.length} arbres)
                           {group.hasCalibre && <Badge variant="secondary" className="ml-2 text-xs">Profil calibre ✓</Badge>}
                         </span>
                       </TableCell>
