@@ -16,6 +16,19 @@ interface Props {
 
 export default function CalibreStep({ type, values, onChange, codeVariete, codePG }: Props) {
   const entries = useMemo(() => getCalibreEntries(type), [type]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = inputRefs.current[index + 1];
+      if (next) next.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = inputRefs.current[index - 1];
+      if (prev) prev.focus();
+    }
+  }, []);
 
   const total = useMemo(() => {
     return entries.reduce((sum, e) => sum + (values[e.dbColumn] || 0), 0);
