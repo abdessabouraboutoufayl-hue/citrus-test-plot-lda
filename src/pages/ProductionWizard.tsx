@@ -19,6 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle } from "lucide-react";
+import CalibreStep from "@/components/production/CalibreStep";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, type CalibreType } from "@/lib/calibre-config";
 
 const schema = z.object({
   domaine_id: z.number({ required_error: "Domaine requis" }),
@@ -47,6 +49,7 @@ export default function ProductionWizard() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
+  const [calibreValues, setCalibreValues] = useState<Record<string, number>>({});
   const navigate = useNavigate();
   const { user, userInfo } = useAuth();
   const isOnline = useOnlineStatus();
