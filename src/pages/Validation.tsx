@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, getCalibreColor } from "@/lib/calibre-config";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
