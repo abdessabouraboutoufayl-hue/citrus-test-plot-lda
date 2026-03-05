@@ -76,7 +76,7 @@ export default function CalibreStep({ type, values, onChange, codeVariete, codeP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => {
+              {entries.map((entry, index) => {
                 const val = values[entry.dbColumn] || 0;
                 const pct = total > 0 ? ((val / NB_ECHANTILLON) * 100).toFixed(1) : "0.0";
                 return (
@@ -85,11 +85,13 @@ export default function CalibreStep({ type, values, onChange, codeVariete, codeP
                     <TableCell className="text-muted-foreground text-sm">{entry.range}</TableCell>
                     <TableCell>
                       <Input
+                        ref={(el) => { inputRefs.current[index] = el; }}
                         type="number"
                         min={0}
                         max={NB_ECHANTILLON}
                         value={val || ""}
                         onChange={(e) => onChange(entry.dbColumn, Math.max(0, Number(e.target.value) || 0))}
+                        onKeyDown={(e) => handleKeyDown(e, index)}
                         className="h-8 w-20"
                         placeholder="0"
                       />
