@@ -301,7 +301,7 @@ export default function ProductionList() {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableCell colSpan={9} className="py-1.5">
                         <span className="font-semibold text-sm">
-                          📊 {group.code}-{group.pg} ({group.items.length} arbres)
+                          📊 {group.domaineName} — {group.code}-{group.pg} ({group.items.length} arbres)
                           {group.hasCalibre && <Badge variant="secondary" className="ml-2 text-xs">Profil calibre ✓</Badge>}
                         </span>
                       </TableCell>
