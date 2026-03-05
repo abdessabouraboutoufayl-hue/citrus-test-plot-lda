@@ -257,7 +257,16 @@ export default function ProductionWizard() {
     form.handleSubmit((data) => submitMutation.mutate({ data, status }))();
   };
 
-  const steps = ["Localisation", "Production", "Photo", "Récapitulatif"];
+  const steps = ["Localisation", "Production", "Calibre", "Photo", "Récapitulatif"];
+
+  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const calibreEntries = getCalibreEntries(calibreType);
+  const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
+  const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON : true;
+
+  const handleCalibreChange = (dbColumn: string, value: number) => {
+    setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
+  };
 
   const selectedVariete = varietes.find((v) => v.id === watchedValues.variete_id);
 
