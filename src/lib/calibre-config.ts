@@ -11,7 +11,7 @@ const MANDARINE_CALIBRES: CalibreEntry[] = [
   { key: "1xxx", label: "1xxx", range: "≥74", dbColumn: "cal_1xxx" },
   { key: "1xx", label: "1xx", range: "72-74", dbColumn: "cal_1xx" },
   { key: "1x_sup", label: "1x", range: "68-72", dbColumn: "cal_1x_sup" },
-  { key: "1x_inf", label: "Calibre 1", range: "64-68", dbColumn: "cal_1x_inf" },
+  { key: "1x_inf", label: "1", range: "64-68", dbColumn: "cal_1x_inf" },
   { key: "2", label: "2", range: "59-64", dbColumn: "cal_2" },
   { key: "3", label: "3", range: "55-59", dbColumn: "cal_3" },
   { key: "4", label: "4", range: "51-55", dbColumn: "cal_4" },
