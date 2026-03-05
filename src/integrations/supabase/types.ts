@@ -423,6 +423,22 @@ export type Database = {
           alerte_poids_moyen_anormal: boolean | null
           arbre_inclus_calculs: boolean
           arbre_statut: string
+          cal_0: number | null
+          cal_1: number | null
+          cal_10: number | null
+          cal_11: number | null
+          cal_1x_inf: number | null
+          cal_1x_sup: number | null
+          cal_1xx: number | null
+          cal_1xxx: number | null
+          cal_2: number | null
+          cal_3: number | null
+          cal_4: number | null
+          cal_5: number | null
+          cal_6: number | null
+          cal_7: number | null
+          cal_8: number | null
+          cal_hors_calibre: number | null
           calibre_moyen_mm: number | null
           campagne_id: number
           code_arbre: string | null
@@ -433,6 +449,7 @@ export type Database = {
           id: number
           is_offline_draft: boolean | null
           ligne_numero: number
+          nb_fruits_echantillon: number | null
           nb_fruits_total: number
           niveau_alerte: string | null
           observations: string | null
@@ -458,6 +475,22 @@ export type Database = {
           alerte_poids_moyen_anormal?: boolean | null
           arbre_inclus_calculs?: boolean
           arbre_statut?: string
+          cal_0?: number | null
+          cal_1?: number | null
+          cal_10?: number | null
+          cal_11?: number | null
+          cal_1x_inf?: number | null
+          cal_1x_sup?: number | null
+          cal_1xx?: number | null
+          cal_1xxx?: number | null
+          cal_2?: number | null
+          cal_3?: number | null
+          cal_4?: number | null
+          cal_5?: number | null
+          cal_6?: number | null
+          cal_7?: number | null
+          cal_8?: number | null
+          cal_hors_calibre?: number | null
           calibre_moyen_mm?: number | null
           campagne_id: number
           code_arbre?: string | null
@@ -468,6 +501,7 @@ export type Database = {
           id?: number
           is_offline_draft?: boolean | null
           ligne_numero: number
+          nb_fruits_echantillon?: number | null
           nb_fruits_total: number
           niveau_alerte?: string | null
           observations?: string | null
@@ -493,6 +527,22 @@ export type Database = {
           alerte_poids_moyen_anormal?: boolean | null
           arbre_inclus_calculs?: boolean
           arbre_statut?: string
+          cal_0?: number | null
+          cal_1?: number | null
+          cal_10?: number | null
+          cal_11?: number | null
+          cal_1x_inf?: number | null
+          cal_1x_sup?: number | null
+          cal_1xx?: number | null
+          cal_1xxx?: number | null
+          cal_2?: number | null
+          cal_3?: number | null
+          cal_4?: number | null
+          cal_5?: number | null
+          cal_6?: number | null
+          cal_7?: number | null
+          cal_8?: number | null
+          cal_hors_calibre?: number | null
           calibre_moyen_mm?: number | null
           campagne_id?: number
           code_arbre?: string | null
@@ -503,6 +553,7 @@ export type Database = {
           id?: number
           is_offline_draft?: boolean | null
           ligne_numero?: number
+          nb_fruits_echantillon?: number | null
           nb_fruits_total?: number
           niveau_alerte?: string | null
           observations?: string | null
