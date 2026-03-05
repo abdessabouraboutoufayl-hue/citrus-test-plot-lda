@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,11 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import * as XLSX from "xlsx-js-style";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, type CalibreType } from "@/lib/calibre-config";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { getCalibreColor } from "@/lib/calibre-config";
 
 const statusColors: Record<string, string> = {
   Brouillon: "bg-muted text-muted-foreground",
@@ -76,7 +80,10 @@ export default function ProductionList() {
       let query = supabase
         .from("production")
         .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
-        .order("created_at", { ascending: false });
+        .order("variete_id", { ascending: true })
+        .order("porte_greffe_id", { ascending: true })
+        .order("ligne_numero", { ascending: true })
+        .order("position_ligne", { ascending: true });
       if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
         query = query.eq("domaine_id", userInfo.domaineId);
       }
@@ -272,40 +279,68 @@ export default function ProductionList() {
             ) : paginated.length === 0 ? (
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Aucune production</TableCell></TableRow>
             ) : (
-              paginated.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.code_arbre}</TableCell>
-                  <TableCell><Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge></TableCell>
-                  <TableCell>{(p.porte_greffes as any)?.code_pg}</TableCell>
-                  <TableCell className="text-right">{p.poids_total_kg}</TableCell>
-                  <TableCell className="text-right">{p.nb_fruits_total}</TableCell>
-                  <TableCell className="text-right">{p.poids_moyen_fruit_g?.toFixed(1)}</TableCell>
-                  <TableCell>{fmtDate(p.date_recolte)}</TableCell>
-                  <TableCell><Badge className={statusColors[p.statut_validation || "Brouillon"]}>{p.statut_validation}</Badge></TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => setViewItem(p)} title="Consulter">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {canSubmit(p) && (
-                        <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre" disabled={submitMutation.isPending}>
-                          <Send className="h-4 w-4 text-success" />
-                        </Button>
-                      )}
-                      {canModify(p) && (
-                        <Button variant="ghost" size="icon" asChild title="Modifier">
-                          <Link to={`/production/edit/${p.id}`}><Pencil className="h-4 w-4 text-primary" /></Link>
-                        </Button>
-                      )}
-                      {canDelete(p) && (
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteItem(p)} title="Supprimer">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+              (() => {
+                // Group paginated items by combo (variete + PG)
+                const comboRows: { comboKey: string; code: string; pg: string; hasCalibre: boolean; items: any[] }[] = [];
+                let lastCombo = "";
+                for (const p of paginated) {
+                  const code = (p.varietes as any)?.code_variete || "?";
+                  const pg = (p.porte_greffes as any)?.code_pg || "?";
+                  const key = `${code}-${pg}`;
+                  if (key !== lastCombo) {
+                    const hasCal = p.cal_0 != null || p.cal_1xxx != null || p.cal_1xx != null || p.cal_2 != null;
+                    comboRows.push({ comboKey: key, code, pg, hasCalibre: hasCal, items: [] });
+                    lastCombo = key;
+                  }
+                  comboRows[comboRows.length - 1].items.push(p);
+                }
+                return comboRows.map(group => (
+                  <React.Fragment key={group.comboKey}>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableCell colSpan={9} className="py-1.5">
+                        <span className="font-semibold text-sm">
+                          📊 {group.code}-{group.pg} ({group.items.length} arbres)
+                          {group.hasCalibre && <Badge variant="secondary" className="ml-2 text-xs">Profil calibre ✓</Badge>}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                    {group.items.map((p: any) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">{p.code_arbre}</TableCell>
+                        <TableCell><Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge></TableCell>
+                        <TableCell>{(p.porte_greffes as any)?.code_pg}</TableCell>
+                        <TableCell className="text-right">{p.poids_total_kg}</TableCell>
+                        <TableCell className="text-right">{p.nb_fruits_total}</TableCell>
+                        <TableCell className="text-right">{p.poids_moyen_fruit_g?.toFixed(1)}</TableCell>
+                        <TableCell>{fmtDate(p.date_recolte)}</TableCell>
+                        <TableCell><Badge className={statusColors[p.statut_validation || "Brouillon"]}>{p.statut_validation}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => setViewItem(p)} title="Consulter">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {canSubmit(p) && (
+                              <Button variant="ghost" size="icon" onClick={() => submitMutation.mutate(p.id)} title="Soumettre" disabled={submitMutation.isPending}>
+                                <Send className="h-4 w-4 text-success" />
+                              </Button>
+                            )}
+                            {canModify(p) && (
+                              <Button variant="ghost" size="icon" asChild title="Modifier">
+                                <Link to={`/production/edit/${p.id}`}><Pencil className="h-4 w-4 text-primary" /></Link>
+                              </Button>
+                            )}
+                            {canDelete(p) && (
+                              <Button variant="ghost" size="icon" onClick={() => setDeleteItem(p)} title="Supprimer">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ));
+              })()
             )}
           </TableBody>
         </Table>
@@ -443,6 +478,50 @@ export default function ProductionList() {
                 <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statut_validation || "Brouillon"]}>{viewItem.statut_validation}</Badge>} />
                 <DetailRow label="Commentaires" value={viewItem.commentaires_validation || "—"} />
               </div>
+              {/* ═══ CALIBRE SECTION ═══ */}
+              {(() => {
+                const code = (viewItem.varietes as any)?.code_variete;
+                const pg = (viewItem.porte_greffes as any)?.code_pg;
+                const calType = code ? getCalibreType(code) : null;
+                const entries = getCalibreEntries(calType);
+                const hasData = entries.some(e => (viewItem as any)[e.dbColumn] > 0);
+                if (!hasData) return null;
+                const chartData = entries
+                  .map(e => ({
+                    calibre: `${e.label} (${e.range})`,
+                    nb: (viewItem as any)[e.dbColumn] || 0,
+                    pct: Math.round(((viewItem as any)[e.dbColumn] || 0) / NB_ECHANTILLON * 100),
+                  }))
+                  .filter(d => d.nb > 0);
+                return (
+                  <>
+                    <Separator />
+                    <Collapsible defaultOpen>
+                      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+                        <h3 className="text-sm font-semibold text-muted-foreground">📏 Profil Calibre ({NB_ECHANTILLON} fruits)</h3>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-2 space-y-2">
+                        <Badge variant="secondary" className="text-xs">ℹ️ Partagé : {code}-{pg}</Badge>
+                        <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
+                              <XAxis type="number" />
+                              <YAxis type="category" dataKey="calibre" width={80} tick={{ fontSize: 11 }} />
+                              <Tooltip formatter={(value: number, name: string, props: any) => [`${value} fruits (${props.payload.pct}%)`, "Quantité"]} />
+                              <Bar dataKey="nb" radius={[0, 4, 4, 0]}>
+                                {chartData.map((_, idx) => (
+                                  <Cell key={idx} fill={getCalibreColor(idx, chartData.length)} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </>
+                );
+              })()}
             </div>
           )}
           <DialogFooter className="flex gap-2 sm:gap-0">
