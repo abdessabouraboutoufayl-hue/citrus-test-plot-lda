@@ -66,6 +66,7 @@ export default function ProductionSaisieVariete() {
   const [rows, setRows] = useState<RowData[]>(
     Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1))
   );
+  const [calibreValues, setCalibreValues] = useState<Record<string, number>>({});
 
   const isCentral = userInfo.role === "responsable_central";
   const effectiveDomaineId = isCentral ? domaineId : userInfo.domaineId;
