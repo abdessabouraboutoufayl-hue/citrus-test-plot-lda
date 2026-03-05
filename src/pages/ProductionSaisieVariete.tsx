@@ -561,6 +561,17 @@ export default function ProductionSaisieVariete() {
             </CardContent>
           </Card>
 
+          {/* Calibre */}
+          {calibreType && !skipCalibre && (
+            <CalibreStep
+              type={calibreType}
+              values={calibreValues}
+              onChange={handleCalibreChange}
+              codeVariete={selectedVariete?.code_variete}
+              codePG={currentPG?.code_pg}
+            />
+          )}
+
           {/* Stats */}
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="pt-6">
