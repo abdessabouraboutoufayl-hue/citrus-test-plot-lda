@@ -67,7 +67,9 @@ export function getCalibreType(codeVariete: string): CalibreType {
     if (num >= range.min && num <= range.max) return "mandarine";
   }
 
-  return null;
+  // Default: mandarine calibre for all other varieties
+  // (citronnier, cédratier, fortunella, lime, micro citrus, etc.)
+  return "mandarine";
 }
 
 export function getCalibreEntries(type: CalibreType): CalibreEntry[] {
