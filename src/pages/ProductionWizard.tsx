@@ -19,6 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle } from "lucide-react";
+import CalibreStep from "@/components/production/CalibreStep";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, type CalibreType } from "@/lib/calibre-config";
 
 const schema = z.object({
   domaine_id: z.number({ required_error: "Domaine requis" }),
@@ -47,6 +49,7 @@ export default function ProductionWizard() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
+  const [calibreValues, setCalibreValues] = useState<Record<string, number>>({});
   const navigate = useNavigate();
   const { user, userInfo } = useAuth();
   const isOnline = useOnlineStatus();
@@ -217,7 +220,9 @@ export default function ProductionWizard() {
           recoltant_nom: data.recoltant_nom || null,
           observations: data.observations || null,
           statut_validation: status,
-        }).eq("id", Number(editId));
+          nb_fruits_echantillon: calibreType ? NB_ECHANTILLON : null,
+          ...calibreValues,
+        } as any).eq("id", Number(editId));
         if (error) throw error;
       } else {
         const { error } = await supabase.from("production").insert({
@@ -239,7 +244,9 @@ export default function ProductionWizard() {
           observations: data.observations || null,
           statut_validation: status,
           user_id: user.id,
-        });
+          nb_fruits_echantillon: calibreType ? NB_ECHANTILLON : null,
+          ...calibreValues,
+        } as any);
         if (error) throw error;
       }
     },
@@ -254,7 +261,16 @@ export default function ProductionWizard() {
     form.handleSubmit((data) => submitMutation.mutate({ data, status }))();
   };
 
-  const steps = ["Localisation", "Production", "Photo", "Récapitulatif"];
+  const steps = ["Localisation", "Production", "Calibre", "Photo", "Récapitulatif"];
+
+  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const calibreEntries = getCalibreEntries(calibreType);
+  const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
+  const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON : true;
+
+  const handleCalibreChange = (dbColumn: string, value: number) => {
+    setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
+  };
 
   const selectedVariete = varietes.find((v) => v.id === watchedValues.variete_id);
 
@@ -434,6 +450,16 @@ export default function ProductionWizard() {
           )}
 
           {step === 2 && (
+            <CalibreStep
+              type={calibreType}
+              values={calibreValues}
+              onChange={handleCalibreChange}
+              codeVariete={selectedVariete?.code_variete}
+              codePG={porteGreffes.find(p => p.id === watchedValues.porte_greffe_id)?.code_pg}
+            />
+          )}
+
+          {step === 3 && (
             <Card>
               <CardHeader><CardTitle>Photo & Observations</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -464,7 +490,7 @@ export default function ProductionWizard() {
             </Card>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <Card>
               <CardHeader><CardTitle>Récapitulatif</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
@@ -493,8 +519,9 @@ export default function ProductionWizard() {
             <Button type="button" variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
               <ChevronLeft className="h-4 w-4 mr-1" /> Retour
             </Button>
-            {step < 3 ? (
-              <Button type="button" onClick={() => setStep((s) => s + 1)}>
+            {step < 4 ? (
+              <Button type="button" onClick={() => setStep((s) => s + 1)}
+                disabled={step === 2 && calibreType !== null && !calibreValid}>
                 Suivant <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (

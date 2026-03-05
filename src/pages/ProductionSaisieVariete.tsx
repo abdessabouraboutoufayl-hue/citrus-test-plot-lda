@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, type CalibreType } from "@/lib/calibre-config";
+import CalibreStep from "@/components/production/CalibreStep";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,6 +66,7 @@ export default function ProductionSaisieVariete() {
   const [rows, setRows] = useState<RowData[]>(
     Array.from({ length: 5 }, (_, i) => emptyRow(i, i + 1))
   );
+  const [calibreValues, setCalibreValues] = useState<Record<string, number>>({});
 
   const isCentral = userInfo.role === "responsable_central";
   const effectiveDomaineId = isCentral ? domaineId : userInfo.domaineId;
@@ -196,6 +199,16 @@ export default function ProductionSaisieVariete() {
   }, [rows]);
 
   const selectedVariete = varietes.find(v => v.id === varieteId);
+  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const calibreEntries = getCalibreEntries(calibreType);
+  const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
+  const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON : true;
+  const hasNonNormalOnly = rows.every(r => r.statut !== "Normal");
+  const skipCalibre = hasNonNormalOnly;
+
+  const handleCalibreChange = useCallback((dbColumn: string, value: number) => {
+    setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
+  }, []);
 
   const tableRef = useRef<HTMLDivElement>(null);
   const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, colIdx: number) => {
@@ -225,7 +238,8 @@ export default function ProductionSaisieVariete() {
 
   const canSave = varieteId && selectedPG && effectiveDomaineId && campagneId && dateRecolte
     && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0)
-    && validationErrors.length === 0;
+    && validationErrors.length === 0
+    && (skipCalibre || calibreValid);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -245,6 +259,11 @@ export default function ProductionSaisieVariete() {
         }
       }
 
+      const calibreData = (!skipCalibre && calibreType) ? {
+        nb_fruits_echantillon: NB_ECHANTILLON,
+        ...calibreValues,
+      } : {};
+
       const allInserts = rows.map(r => ({
         domaine_id: effectiveDomaineId,
         campagne_id: campagneId,
@@ -262,7 +281,8 @@ export default function ProductionSaisieVariete() {
         arbre_statut: r.statut,
         arbre_inclus_calculs: r.statut === "Normal",
         photo_url: photoUrls[r.id] || null,
-      }));
+        ...(r.statut === "Normal" ? calibreData : {}),
+      } as any));
       if (allInserts.length === 0) throw new Error("Aucune donnée");
       const { error } = await supabase.from("production").insert(allInserts);
       if (error) throw error;
@@ -540,6 +560,17 @@ export default function ProductionSaisieVariete() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* Calibre */}
+          {calibreType && !skipCalibre && (
+            <CalibreStep
+              type={calibreType}
+              values={calibreValues}
+              onChange={handleCalibreChange}
+              codeVariete={selectedVariete?.code_variete}
+              codePG={currentPG?.code_pg}
+            />
+          )}
 
           {/* Stats */}
           <Card className="border-primary/20 bg-primary/5">

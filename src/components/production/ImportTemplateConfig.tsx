@@ -15,6 +15,7 @@ import {
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx-js-style";
+import { getCalibreType, getCalibreEntries } from "@/lib/calibre-config";
 
 interface Variete {
   id: number;
@@ -139,6 +140,9 @@ export default function ImportTemplateConfig({
     // Build rows
     const rows: Record<string, any>[] = [];
     combos.forEach(({ variete, pg }) => {
+      const calType = getCalibreType(variete.code_variete);
+      const calEntries = getCalibreEntries(calType);
+
       for (let a = 1; a <= nbArbresPerCombo; a++) {
         const row: Record<string, any> = {
           Campagne: campagne?.code_campagne || "",
@@ -151,6 +155,10 @@ export default function ImportTemplateConfig({
           Poids_kg: "",
           Fruits: "",
         };
+        // Calibre columns based on variety type
+        for (const ce of calEntries) {
+          row[ce.dbColumn.replace("cal_", "Cal_")] = "";
+        }
         if (optionalCols.has("Calibre_mm")) row["Calibre_mm"] = "";
         if (optionalCols.has("Declassement_pct")) row["Declassement_pct"] = "";
         if (optionalCols.has("Qualite")) row["Qualite"] = "A";
