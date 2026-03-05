@@ -15,7 +15,7 @@ import {
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx-js-style";
-import { getCalibreType, getCalibreEntries } from "@/lib/calibre-config";
+import { EXCEL_CALIBRE_COLUMNS } from "@/lib/calibre-config";
 
 interface Variete {
   id: number;
@@ -137,12 +137,9 @@ export default function ImportTemplateConfig({
     const campagne = campagnes.find(c => c.id === campagneId);
     const domaine = domaines.find(d => d.id === effectiveDomaineId);
 
-    // Build rows
+    // Build rows - ALL calibre columns always present with _M/_N suffixes
     const rows: Record<string, any>[] = [];
     combos.forEach(({ variete, pg }) => {
-      const calType = getCalibreType(variete.code_variete);
-      const calEntries = getCalibreEntries(calType);
-
       for (let a = 1; a <= nbArbresPerCombo; a++) {
         const row: Record<string, any> = {
           Campagne: campagne?.code_campagne || "",
@@ -155,10 +152,10 @@ export default function ImportTemplateConfig({
           Poids_kg: "",
           Fruits: "",
         };
-        // Calibre columns based on variety type (if enabled)
+        // Always include ALL calibre columns (_M, _N, HC)
         if (includeCalibres) {
-          for (const ce of calEntries) {
-            row[ce.dbColumn.replace("cal_", "Cal_")] = "";
+          for (const col of EXCEL_CALIBRE_COLUMNS) {
+            row[col.excelKey] = "";
           }
         }
         if (optionalCols.has("Declassement_pct")) row["Declassement_pct"] = "";
@@ -171,16 +168,23 @@ export default function ImportTemplateConfig({
       }
     });
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+    // Replace calibre keys with headers that include ranges
+    const headerRow = rows.length > 0 ? { ...rows[0] } : {};
+    const excelKeyToHeader = new Map(EXCEL_CALIBRE_COLUMNS.map(c => [c.excelKey, c.excelHeader]));
+    const finalKeys = Object.keys(headerRow);
+    const headers = finalKeys.map(k => excelKeyToHeader.get(k) || k);
+
+    // Build sheet with custom headers
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    XLSX.utils.sheet_add_json(ws, rows, { skipHeader: true, origin: 1 });
 
     // Column widths
-    const keys = Object.keys(rows[0] || {});
-    ws["!cols"] = keys.map(k => ({ wch: Math.max(k.length + 2, 14) }));
+    ws["!cols"] = headers.map(h => ({ wch: Math.max(h.length + 2, 14) }));
 
     // Data validations for Qualité and Statut dropdowns
     const dvs: any[] = [];
-    const qualColIdx = keys.indexOf("Qualite");
-    const statutColIdx = keys.indexOf("Statut");
+    const qualColIdx = finalKeys.indexOf("Qualite");
+    const statutColIdx = finalKeys.indexOf("Statut");
     if (qualColIdx >= 0) {
       dvs.push({
         sqref: `${XLSX.utils.encode_col(qualColIdx)}2:${XLSX.utils.encode_col(qualColIdx)}${rows.length + 1}`,
@@ -205,6 +209,12 @@ export default function ImportTemplateConfig({
       [""],
       ["Colonnes pré-remplies : Campagne, Date, Domaine, Code, PG"],
       ["Colonnes à remplir : Ligne (1-20), Position (1-25), Poids_kg, Fruits"],
+      [""],
+      ["CALIBRES - Colonnes avec suffixes :"],
+      ["  _M = Mandarine/Clémentine (remplir si variété mandarine)"],
+      ["  _N = Navel/Orange/Pomelo (remplir si variété navel)"],
+      ["  Cal_HC = Hors calibre (partagé)"],
+      ["  Validation : total colonnes _M + Cal_HC = 30 OU total colonnes _N + Cal_HC = 30"],
       [""],
       ["Qualité : A, B, C, Hors norme"],
       ["Statut : Normal, Chétif, Manquant"],

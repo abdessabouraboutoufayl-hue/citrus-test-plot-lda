@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getCalibreType, mapExcelCalibreToDb, validateExcelCalibreSum, NB_ECHANTILLON } from "@/lib/calibre-config";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,7 @@ interface ImportRow {
   error?: string;
   photoFile?: File;
   photoKey?: string;
+  rawRow?: Record<string, any>;  // Keep raw Excel row for calibre mapping
 }
 
 interface Variete {
@@ -139,6 +141,16 @@ export default function ImportUploadPreview({
           else if (pos < 1 || pos > 25) error = "Position hors limites (1-25)";
           else if (statut === "Normal" && poids <= 0) error = "Poids requis > 0";
 
+          // Validate calibre sum based on variety type
+          if (!error && foundVar && statut === "Normal") {
+            const calType = getCalibreType(foundVar.code_variete);
+            const { valid: calValid, sum: calSum } = validateExcelCalibreSum(row, calType);
+            if (!calValid) {
+              const normLabel = calType === "navel" ? "Navel (_N)" : "Mandarine (_M)";
+              error = `Calibre ${normLabel}: total ${calSum}/${NB_ECHANTILLON}`;
+            }
+          }
+
           const photoKey = buildPhotoKey(code, pg, ligne, pos);
 
           return {
@@ -147,6 +159,7 @@ export default function ImportUploadPreview({
             qualite, statut, recoltant, observations,
             valid: !error, error, photoKey,
             photoFile: photoMap.get(photoKey),
+            rawRow: row,
           };
         });
 
@@ -240,6 +253,11 @@ export default function ImportUploadPreview({
         const v = varietes.find(va => va.code_variete.toLowerCase() === r.code_variete.toLowerCase())!;
         const pg = porteGreffes.find(p => p.code_pg.toLowerCase() === r.code_pg.toLowerCase())!;
         const isNormal = r.statut === "Normal";
+
+        // Map calibre Excel columns to DB columns
+        const calType = getCalibreType(v.code_variete);
+        const calibreDbValues = isNormal && r.rawRow ? mapExcelCalibreToDb(r.rawRow, calType) : {};
+
         return {
           domaine_id: effectiveDomaineId,
           campagne_id: campagneId,
@@ -259,6 +277,7 @@ export default function ImportUploadPreview({
           user_id: user.id,
           arbre_statut: r.statut,
           arbre_inclus_calculs: isNormal,
+          ...calibreDbValues,
         };
       });
 
