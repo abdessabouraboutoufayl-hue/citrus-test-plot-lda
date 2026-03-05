@@ -17,22 +17,22 @@ const MANDARINE_CALIBRES: CalibreEntry[] = [
   { key: "4", label: "4", range: "51-55", dbColumn: "cal_4" },
   { key: "5", label: "5", range: "47-51", dbColumn: "cal_5" },
   { key: "6", label: "6", range: "44-47", dbColumn: "cal_6" },
-  { key: "hors_calibre", label: "HC", range: "<44", dbColumn: "cal_hors_calibre" },
+  { key: "hors_calibre", label: "Hors cal.", range: "<44", dbColumn: "cal_hors_calibre" },
 ];
 
 const NAVEL_CALIBRES: CalibreEntry[] = [
-  { key: "0", label: "0", range: "≥92", dbColumn: "cal_0" },
-  { key: "1", label: "1", range: "87-92", dbColumn: "cal_1" },
-  { key: "2", label: "2", range: "84-87", dbColumn: "cal_2" },
-  { key: "3", label: "3", range: "81-84", dbColumn: "cal_3" },
-  { key: "4", label: "4", range: "77-81", dbColumn: "cal_4" },
-  { key: "5", label: "5", range: "73-77", dbColumn: "cal_5" },
-  { key: "6", label: "6", range: "70-73", dbColumn: "cal_6" },
-  { key: "7", label: "7", range: "67-70", dbColumn: "cal_7" },
-  { key: "8", label: "8", range: "64-67", dbColumn: "cal_8" },
-  { key: "10", label: "10", range: "60-64", dbColumn: "cal_10" },
-  { key: "11", label: "11", range: "56-60", dbColumn: "cal_11" },
-  { key: "hors_calibre", label: "HC", range: "<56", dbColumn: "cal_hors_calibre" },
+  { key: "0", label: "0", range: "≥93", dbColumn: "cal_0" },
+  { key: "1", label: "1", range: "88-93", dbColumn: "cal_1" },
+  { key: "2", label: "2", range: "85-88", dbColumn: "cal_2" },
+  { key: "3", label: "3", range: "82-85", dbColumn: "cal_3" },
+  { key: "4", label: "4", range: "78-82", dbColumn: "cal_4" },
+  { key: "5", label: "5", range: "74-78", dbColumn: "cal_5" },
+  { key: "6", label: "6", range: "71-74", dbColumn: "cal_6" },
+  { key: "7", label: "7", range: "68-71", dbColumn: "cal_7" },
+  { key: "8", label: "8", range: "65-68", dbColumn: "cal_8" },
+  { key: "10", label: "10", range: "61-65", dbColumn: "cal_10" },
+  { key: "11", label: "11", range: "59-61", dbColumn: "cal_11" },
+  { key: "hors_calibre", label: "Hors cal.", range: "<59", dbColumn: "cal_hors_calibre" },
 ];
 
 // Mandarine codes: 007-120, 136
