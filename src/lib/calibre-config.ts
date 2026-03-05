@@ -35,14 +35,11 @@ const NAVEL_CALIBRES: CalibreEntry[] = [
   { key: "hors_calibre", label: "Hors cal.", range: "<59", dbColumn: "cal_hors_calibre" },
 ];
 
-// Mandarine codes: 007-120, 136
-const MANDARINE_CODE_RANGES = [
-  { min: 7, max: 120 },
-  { min: 136, max: 136 },
-];
-
-// Navel/Orange codes: 041, 052, 081-087, 115, 135
-const NAVEL_CODES = new Set([41, 52, 81, 82, 83, 84, 85, 86, 87, 115, 135]);
+// Navel/Orange codes — exhaustive list from the 98-variety reference
+const NAVEL_CODES = new Set([
+  1, 4, 11, 16, 18, 20, 24, 28, 39, 40, 41, 43, 44, 45, 48, 50, 53,
+  57, 73, 78, 81, 82, 85, 87, 95, 96, 97, 100, 115, 116, 132, 135,
+]);
 
 // Letter-based codes
 const MANDARINE_LETTER_CODES = new Set(["CS", "CP", "CT", "CED", "PAM", "LM", "MS", "MP", "MT", "SAT"]);
@@ -59,16 +56,9 @@ export function getCalibreType(codeVariete: string): CalibreType {
 
   // Then numeric codes
   const num = parseInt(codeVariete, 10);
-  if (isNaN(num)) return null;
+  if (!isNaN(num) && NAVEL_CODES.has(num)) return "navel";
 
-  if (NAVEL_CODES.has(num)) return "navel";
-
-  for (const range of MANDARINE_CODE_RANGES) {
-    if (num >= range.min && num <= range.max) return "mandarine";
-  }
-
-  // Default: mandarine calibre for all other varieties
-  // (citronnier, cédratier, fortunella, lime, micro citrus, etc.)
+  // Default: mandarine (citronnier, cédratier, fortunella, lime, micro citrus, etc.)
   return "mandarine";
 }
 
