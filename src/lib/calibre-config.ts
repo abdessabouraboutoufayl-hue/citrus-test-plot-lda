@@ -44,9 +44,20 @@ const MANDARINE_CODE_RANGES = [
 // Navel/Orange codes: 041, 052, 081-087, 115, 135
 const NAVEL_CODES = new Set([41, 52, 81, 82, 83, 84, 85, 86, 87, 115, 135]);
 
+// Letter-based codes
+const MANDARINE_LETTER_CODES = new Set(["CS", "CP", "CT", "CED", "PAM", "LM", "MS", "MP", "MT", "SAT"]);
+const NAVEL_LETTER_CODES = new Set(["NS", "NP", "NT", "OT", "OS"]);
+
 export type CalibreType = "mandarine" | "navel" | null;
 
 export function getCalibreType(codeVariete: string): CalibreType {
+  const upper = codeVariete.trim().toUpperCase();
+
+  // Check letter codes first
+  if (MANDARINE_LETTER_CODES.has(upper)) return "mandarine";
+  if (NAVEL_LETTER_CODES.has(upper)) return "navel";
+
+  // Then numeric codes
   const num = parseInt(codeVariete, 10);
   if (isNaN(num)) return null;
 
