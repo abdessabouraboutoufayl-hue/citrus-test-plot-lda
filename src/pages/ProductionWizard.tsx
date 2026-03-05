@@ -220,7 +220,9 @@ export default function ProductionWizard() {
           recoltant_nom: data.recoltant_nom || null,
           observations: data.observations || null,
           statut_validation: status,
-        }).eq("id", Number(editId));
+          nb_fruits_echantillon: calibreType ? NB_ECHANTILLON : null,
+          ...calibreValues,
+        } as any).eq("id", Number(editId));
         if (error) throw error;
       } else {
         const { error } = await supabase.from("production").insert({
@@ -242,7 +244,9 @@ export default function ProductionWizard() {
           observations: data.observations || null,
           statut_validation: status,
           user_id: user.id,
-        });
+          nb_fruits_echantillon: calibreType ? NB_ECHANTILLON : null,
+          ...calibreValues,
+        } as any);
         if (error) throw error;
       }
     },
