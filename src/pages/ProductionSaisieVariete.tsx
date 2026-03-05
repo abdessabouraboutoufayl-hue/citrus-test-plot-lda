@@ -238,7 +238,8 @@ export default function ProductionSaisieVariete() {
 
   const canSave = varieteId && selectedPG && effectiveDomaineId && campagneId && dateRecolte
     && rows.some(r => r.statut === "Normal" && r.poids && r.poids > 0 && r.fruits && r.fruits > 0)
-    && validationErrors.length === 0;
+    && validationErrors.length === 0
+    && (skipCalibre || calibreValid);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
