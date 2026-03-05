@@ -293,7 +293,13 @@ export default function ProductionSaisieVariete() {
       toast.success(`${stats.nbProductifs} arbres enregistrés${excluded > 0 ? ` (${excluded} exclus)` : ""}`);
       navigate("/production");
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err: any) => {
+      if (err.message?.includes("production_unique_arbre") || err.code === "23505") {
+        toast.error("Doublon détecté : un arbre avec la même ligne/position existe déjà pour ce combo variété/PG/campagne. Vérifiez les numéros de ligne et position.");
+      } else {
+        toast.error(err.message);
+      }
+    },
   });
 
   return (
