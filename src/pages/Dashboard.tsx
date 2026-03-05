@@ -4,8 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sprout, Package, Cherry, Star } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { getCalibreType, getCalibreEntries, NB_ECHANTILLON } from "@/lib/calibre-config";
 
 const COLORS = ["hsl(123,38%,33%)", "hsl(21,100%,60%)", "hsl(207,90%,54%)", "hsl(36,100%,50%)"];
+
+const CALIBRE_COLORS = [
+  "#2d6a4f", "#40916c", "#52b788", "#74c69d", "#95d5b2",
+  "#d4a373", "#e9c46a", "#f4a261", "#e76f51", "#d62828",
+  "#9b2226", "#6a040f",
+];
 
 export default function Dashboard() {
   const { userInfo } = useAuth();
@@ -50,6 +57,42 @@ export default function Dashboard() {
     byPG[pg] = (byPG[pg] || 0) + 1;
   });
   const pieData = Object.entries(byPG).map(([name, value]) => ({ name, value }));
+
+  // Calibre distribution by variety
+  const calibreChartData = (() => {
+    const byVar: Record<string, { count: number; calibres: Record<string, number> }> = {};
+    productions.forEach((p: any) => {
+      const code = p.varietes?.code_variete;
+      if (!code || !p.nb_fruits_echantillon) return;
+      const calType = getCalibreType(code);
+      if (!calType) return;
+      const entries = getCalibreEntries(calType);
+      if (!byVar[code]) byVar[code] = { count: 0, calibres: {} };
+      byVar[code].count++;
+      entries.forEach(e => {
+        const val = Number(p[e.dbColumn]) || 0;
+        byVar[code].calibres[e.label] = (byVar[code].calibres[e.label] || 0) + val;
+      });
+    });
+    return Object.entries(byVar).map(([code, data]) => {
+      const row: Record<string, any> = { code };
+      const calType = getCalibreType(code);
+      const entries = getCalibreEntries(calType);
+      entries.forEach(e => {
+        row[e.label] = data.count > 0
+          ? Math.round(((data.calibres[e.label] || 0) / (data.count * NB_ECHANTILLON)) * 1000) / 10
+          : 0;
+      });
+      return row;
+    });
+  })();
+
+  const calibreLabels = (() => {
+    if (calibreChartData.length === 0) return [];
+    const firstCode = calibreChartData[0].code;
+    const calType = getCalibreType(firstCode);
+    return getCalibreEntries(calType).map(e => e.label);
+  })();
 
   const kpis = [
     { title: "Arbres récoltés", value: totalArbres, icon: Sprout, color: "text-primary" },
@@ -116,6 +159,26 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Calibre Distribution */}
+      {calibreChartData.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">📏 Distribution Calibres par Variété (% moyen)</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={calibreChartData} margin={{ left: 20, bottom: 20 }}>
+                <XAxis dataKey="code" />
+                <YAxis unit="%" />
+                <Tooltip formatter={(value: number) => `${value}%`} />
+                <Legend />
+                {calibreLabels.map((label, i) => (
+                  <Bar key={label} dataKey={label} stackId="calibre" fill={CALIBRE_COLORS[i % CALIBRE_COLORS.length]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
