@@ -259,6 +259,11 @@ export default function ProductionSaisieVariete() {
         }
       }
 
+      const calibreData = (!skipCalibre && calibreType) ? {
+        nb_fruits_echantillon: NB_ECHANTILLON,
+        ...calibreValues,
+      } : {};
+
       const allInserts = rows.map(r => ({
         domaine_id: effectiveDomaineId,
         campagne_id: campagneId,
@@ -276,7 +281,8 @@ export default function ProductionSaisieVariete() {
         arbre_statut: r.statut,
         arbre_inclus_calculs: r.statut === "Normal",
         photo_url: photoUrls[r.id] || null,
-      }));
+        ...(r.statut === "Normal" ? calibreData : {}),
+      } as any));
       if (allInserts.length === 0) throw new Error("Aucune donnée");
       const { error } = await supabase.from("production").insert(allInserts);
       if (error) throw error;
