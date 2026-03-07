@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -49,6 +49,7 @@ export function AppSidebar() {
   if (userInfo.role === "responsable_central") {
     adminItems.push({ title: "Validation", url: "/validation", icon: CheckSquare });
     adminItems.push({ title: "Administration", url: "/admin", icon: Settings });
+    adminItems.push({ title: "Gestion utilisateurs", url: "/admin/utilisateurs", icon: Users });
   }
 
   return (
