@@ -20,32 +20,32 @@ export function AppSidebar() {
   const { hasAccess } = usePermissions();
 
   const productionItems = [
-    { title: "Saisie / Import", url: "/production/saisie-par-variete", icon: TreePine },
-    { title: "Liste production", url: "/production", icon: List },
-    { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3 },
-  ];
+    { title: "Saisie / Import", url: "/production/saisie-par-variete", icon: TreePine, permKey: "production_saisie" },
+    { title: "Liste production", url: "/production", icon: List, permKey: "production_list" },
+    { title: "Dashboard production", url: "/production/dashboard", icon: BarChart3, permKey: "production_dashboard" },
+  ].filter(i => hasAccess(i.permKey));
 
   const qualiteItems = [
-    { title: "Nouvelle analyse", url: "/qualite/new", icon: PlusCircle },
-    { title: "Liste analyses", url: "/qualite", icon: List },
-    { title: "Dashboard qualité", url: "/qualite/dashboard", icon: BarChart3 },
-  ];
+    { title: "Nouvelle analyse", url: "/qualite/new", icon: PlusCircle, permKey: "qualite_new" },
+    { title: "Liste analyses", url: "/qualite", icon: List, permKey: "qualite_list" },
+    { title: "Dashboard qualité", url: "/qualite/dashboard", icon: BarChart3, permKey: "qualite_dashboard" },
+  ].filter(i => hasAccess(i.permKey));
 
   const phenologieItems = [
-    { title: "Suivi phénologique", url: "/phenologie/suivi", icon: Flower2 },
-    { title: "Historique", url: "/phenologie/historique", icon: History },
-    { title: "Comparaison campagnes", url: "/phenologie/comparaison", icon: GitCompareArrows },
-    { title: "Dashboard phénologie", url: "/phenologie/dashboard", icon: BarChart3 },
-  ];
+    { title: "Suivi phénologique", url: "/phenologie/suivi", icon: Flower2, permKey: "phenologie_suivi" },
+    { title: "Historique", url: "/phenologie/historique", icon: History, permKey: "phenologie_historique" },
+    { title: "Comparaison campagnes", url: "/phenologie/comparaison", icon: GitCompareArrows, permKey: "phenologie_comparaison" },
+    { title: "Dashboard phénologie", url: "/phenologie/dashboard", icon: BarChart3, permKey: "phenologie_dashboard" },
+  ].filter(i => hasAccess(i.permKey));
 
   const analyticsItems = [
-    ...(userInfo.role === "direction" || userInfo.role === "responsable_central" ? [{ title: "Vue Exécutive", url: "/analytics/executive", icon: LineChart }] : []),
-    { title: "Dashboard Global", url: "/analytics/global", icon: BarChart3 },
-    { title: "Carte GPS", url: "/analytics/carte-gps", icon: Map },
-    { title: "Analyses Croisées", url: "/analytics/analyses-croisees", icon: GitMerge },
-    { title: "Exports Avancés", url: "/analytics/exports", icon: Download },
-    { title: "Rapports Auto", url: "/analytics/rapports-auto", icon: FileText },
-  ];
+    ...(userInfo.role === "direction" || userInfo.role === "responsable_central" ? [{ title: "Vue Exécutive", url: "/analytics/executive", icon: LineChart, permKey: "analytics_executive" }] : []),
+    { title: "Dashboard Global", url: "/analytics/global", icon: BarChart3, permKey: "analytics_global" },
+    { title: "Carte GPS", url: "/analytics/carte-gps", icon: Map, permKey: "analytics_carte" },
+    { title: "Analyses Croisées", url: "/analytics/analyses-croisees", icon: GitMerge, permKey: "analytics_croisees" },
+    { title: "Exports Avancés", url: "/analytics/exports", icon: Download, permKey: "analytics_exports" },
+    { title: "Rapports Auto", url: "/analytics/rapports-auto", icon: FileText, permKey: "analytics_rapports" },
+  ].filter(i => hasAccess(i.permKey));
 
   const adminItems: typeof productionItems = [];
   if (userInfo.role === "responsable_central") {
