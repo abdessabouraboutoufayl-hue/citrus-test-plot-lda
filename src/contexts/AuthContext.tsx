@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userInfo, setUserInfo] = useState<UserInfo>({ role: null, domaineId: null, nomComplet: null, email: null });
   const [loading, setLoading] = useState(true);
 
-  const fetchUserInfo = async (userId: string) => {
+  const fetchUserInfo = async (userId: string, userEmail?: string) => {
     const [rolesRes, profileRes] = await Promise.all([
       supabase.from("user_roles").select("role, domaine_id").eq("user_id", userId),
       supabase.from("profiles").select("nom_complet, email").eq("id", userId).maybeSingle(),
