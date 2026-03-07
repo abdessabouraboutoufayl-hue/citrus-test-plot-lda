@@ -325,7 +325,7 @@ function UtilisateursGestionTab() {
       
       const roleData: any = {
         role: selectedRole,
-        permission_profile_id: selectedProfileId || null,
+        permission_profile_id: selectedProfileId && selectedProfileId !== "none" ? selectedProfileId : null,
         domaine_id: selectedDomaineId ? parseInt(selectedDomaineId) : null,
       };
 
