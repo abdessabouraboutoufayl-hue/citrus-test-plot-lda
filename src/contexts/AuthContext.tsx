@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userInfo, setUserInfo] = useState<UserInfo>({ role: null, domaineId: null, nomComplet: null, email: null });
   const [loading, setLoading] = useState(true);
 
-  const fetchUserInfo = async (userId: string) => {
+  const fetchUserInfo = async (userId: string, userEmail?: string) => {
     const [rolesRes, profileRes] = await Promise.all([
       supabase.from("user_roles").select("role, domaine_id").eq("user_id", userId),
       supabase.from("profiles").select("nom_complet, email").eq("id", userId).maybeSingle(),
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: primaryRole?.role ?? null,
       domaineId: domaineRole?.domaine_id ?? null,
       nomComplet: profileRes.data?.nom_complet ?? null,
-      email: profileRes.data?.email ?? null,
+      email: profileRes.data?.email ?? userEmail ?? null,
     });
   };
 
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setTimeout(() => fetchUserInfo(session.user.id), 0);
+        setTimeout(() => fetchUserInfo(session.user.id, session.user.email), 0);
       } else {
         setUserInfo({ role: null, domaineId: null, nomComplet: null, email: null });
       }
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) fetchUserInfo(session.user.id);
+      if (session?.user) fetchUserInfo(session.user.id, session.user.email);
       setLoading(false);
     });
 

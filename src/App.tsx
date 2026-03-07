@@ -28,13 +28,15 @@ import AnalyticsRapportsAuto from "@/pages/AnalyticsRapportsAuto";
 import ProductionSaisieVariete from "@/pages/ProductionSaisieVariete";
 import ResetPassword from "@/pages/ResetPassword";
 import GestionUtilisateurs from "@/pages/GestionUtilisateurs";
+import NoAccess from "@/pages/NoAccess";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, userInfo } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Chargement...</div>;
   if (!session) return <Navigate to="/login" replace />;
+  if (!userInfo.role) return <NoAccess />;
   return <>{children}</>;
 }
 

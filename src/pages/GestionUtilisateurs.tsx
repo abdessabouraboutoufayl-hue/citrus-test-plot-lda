@@ -264,16 +264,39 @@ function UtilisateursGestionTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [selectedDomaineId, setSelectedDomaineId] = useState<string>("");
 
-  const { data: roles = [], isLoading } = useQuery({
-    queryKey: ["admin-user-roles-full"],
+  // Fetch all profiles (users) and their roles
+  const { data: allUsers = [], isLoading } = useQuery({
+    queryKey: ["admin-all-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get all profiles
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, email, nom_complet")
+        .order("email");
+      if (pErr) throw pErr;
+
+      // Get all user_roles
+      const { data: roles, error: rErr } = await supabase
         .from("user_roles")
-        .select("*, profiles:user_id(email, nom_complet), domaines:domaine_id(nom)")
-        .order("user_id");
-      if (error) throw error;
-      return data;
+        .select("*, domaines:domaine_id(nom)");
+      if (rErr) throw rErr;
+
+      // Merge: each profile with their role (if any)
+      return (profiles || []).map((p: any) => {
+        const userRole = (roles || []).find((r: any) => r.user_id === p.id);
+        return {
+          ...p,
+          role: userRole?.role || null,
+          domaine_id: userRole?.domaine_id || null,
+          domaine_nom: (userRole?.domaines as any)?.nom || null,
+          permission_profile_id: userRole?.permission_profile_id || null,
+          has_role: !!userRole,
+          role_id: userRole?.id || null,
+        };
+      });
     },
   });
 
@@ -286,26 +309,50 @@ function UtilisateursGestionTab() {
     },
   });
 
-  const updateProfileMutation = useMutation({
-    mutationFn: async () => {
-      if (!editUserId) return;
-      const { error } = await supabase.from("user_roles").update({
-        permission_profile_id: selectedProfileId || null,
-      }).eq("user_id", editUserId);
+  const { data: domaines = [] } = useQuery({
+    queryKey: ["domaines-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("domaines").select("id, nom").order("nom");
       if (error) throw error;
+      return data;
+    },
+  });
+
+  const assignRoleMutation = useMutation({
+    mutationFn: async () => {
+      if (!editUserId || !selectedRole) return;
+      const currentUser = allUsers.find((u: any) => u.id === editUserId);
+      
+      const roleData: any = {
+        role: selectedRole,
+        permission_profile_id: selectedProfileId || null,
+        domaine_id: selectedDomaineId ? parseInt(selectedDomaineId) : null,
+      };
+
+      if (currentUser?.has_role) {
+        // Update existing role
+        const { error } = await supabase.from("user_roles").update(roleData).eq("user_id", editUserId);
+        if (error) throw error;
+      } else {
+        // Insert new role
+        const { error } = await supabase.from("user_roles").insert({ ...roleData, user_id: editUserId });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-user-roles-full"] });
-      toast.success("Profil de permissions assigné");
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Droits mis à jour");
       setEditOpen(false);
       setEditUserId(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const openAssign = (userId: string, currentProfileId: string | null) => {
-    setEditUserId(userId);
-    setSelectedProfileId(currentProfileId || "");
+  const openAssign = (user: any) => {
+    setEditUserId(user.id);
+    setSelectedRole(user.role || "");
+    setSelectedProfileId(user.permission_profile_id || "");
+    setSelectedDomaineId(user.domaine_id?.toString() || "");
     setEditOpen(true);
   };
 
@@ -319,7 +366,7 @@ function UtilisateursGestionTab() {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Utilisateurs & Profils d'accès</CardTitle>
-        <CardDescription>Assignez un profil de permissions à chaque utilisateur</CardDescription>
+        <CardDescription>Assignez un rôle et un profil de permissions à chaque utilisateur</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
@@ -336,22 +383,30 @@ function UtilisateursGestionTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : roles.map((r: any) => (
-              <TableRow key={r.id}>
-                <TableCell className="text-sm">{(r.profiles as any)?.email || "—"}</TableCell>
-                <TableCell className="font-medium">{(r.profiles as any)?.nom_complet || "—"}</TableCell>
-                <TableCell><Badge variant="outline">{roleLabels[r.role] || r.role}</Badge></TableCell>
-                <TableCell>{(r.domaines as any)?.nom || "—"}</TableCell>
+            ) : allUsers.map((u: any) => (
+              <TableRow key={u.id} className={!u.has_role ? "bg-destructive/5" : ""}>
+                <TableCell className="text-sm">{u.email || "—"}</TableCell>
+                <TableCell className="font-medium">{u.nom_complet || "—"}</TableCell>
                 <TableCell>
-                  {r.permission_profile_id ? (
-                    <Badge variant="secondary">{getProfileName(r.permission_profile_id) || "—"}</Badge>
+                  {u.role ? (
+                    <Badge variant="outline">{roleLabels[u.role] || u.role}</Badge>
+                  ) : (
+                    <Badge variant="destructive" className="text-xs">Aucun rôle</Badge>
+                  )}
+                </TableCell>
+                <TableCell>{u.domaine_nom || "—"}</TableCell>
+                <TableCell>
+                  {!u.has_role ? (
+                    <span className="text-xs text-destructive font-medium">Sans accès</span>
+                  ) : u.permission_profile_id ? (
+                    <Badge variant="secondary">{getProfileName(u.permission_profile_id) || "—"}</Badge>
                   ) : (
                     <span className="text-xs text-muted-foreground">Accès complet</span>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => openAssign(r.user_id, r.permission_profile_id)}>
-                    <Shield className="h-4 w-4 mr-1" /> Assigner
+                  <Button variant={u.has_role ? "ghost" : "default"} size="sm" onClick={() => openAssign(u)}>
+                    <Shield className="h-4 w-4 mr-1" /> {u.has_role ? "Modifier" : "Activer"}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -361,8 +416,32 @@ function UtilisateursGestionTab() {
       </CardContent>
       <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditUserId(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Assigner un profil d'accès</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Configurer l'accès utilisateur</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            <div>
+              <Label>Rôle</Label>
+              <Select value={selectedRole} onValueChange={setSelectedRole}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
+                  <SelectItem value="responsable_central">Responsable Central</SelectItem>
+                  <SelectItem value="direction">Direction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedRole === "responsable_domaine" && (
+              <div>
+                <Label>Domaine</Label>
+                <Select value={selectedDomaineId} onValueChange={setSelectedDomaineId}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
+                  <SelectContent>
+                    {domaines.map((d: any) => (
+                      <SelectItem key={d.id} value={d.id.toString()}>{d.nom}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Profil de permissions</Label>
               <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
@@ -370,14 +449,14 @@ function UtilisateursGestionTab() {
                 <SelectContent>
                   <SelectItem value="none">Accès complet (par défaut)</SelectItem>
                   {permProfiles.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>{(p as any).nom}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => updateProfileMutation.mutate()} disabled={updateProfileMutation.isPending}>Enregistrer</Button>
+            <Button onClick={() => assignRoleMutation.mutate()} disabled={!selectedRole || assignRoleMutation.isPending}>Enregistrer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
