@@ -1,6 +1,7 @@
 import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const { userInfo, signOut } = useAuth();
+  const { hasAccess } = usePermissions();
 
   const productionItems = [
     { title: "Saisie / Import", url: "/production/saisie-par-variete", icon: TreePine },
