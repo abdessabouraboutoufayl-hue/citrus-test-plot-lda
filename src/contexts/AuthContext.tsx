@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setTimeout(() => fetchUserInfo(session.user.id), 0);
+        setTimeout(() => fetchUserInfo(session.user.id, session.user.email), 0);
       } else {
         setUserInfo({ role: null, domaineId: null, nomComplet: null, email: null });
       }
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) fetchUserInfo(session.user.id);
+      if (session?.user) fetchUserInfo(session.user.id, session.user.email);
       setLoading(false);
     });
 
