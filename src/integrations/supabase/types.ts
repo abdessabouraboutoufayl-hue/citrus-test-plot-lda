@@ -168,6 +168,27 @@ export type Database = {
         }
         Relationships: []
       }
+      permission_profiles: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          nom: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          nom: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          nom?: string
+        }
+        Relationships: []
+      }
       phenologie: {
         Row: {
           alerte_chute_physio_intense: boolean | null
@@ -602,6 +623,38 @@ export type Database = {
           },
         ]
       }
+      profile_permissions: {
+        Row: {
+          can_access: boolean | null
+          id: string
+          module_key: string
+          profile_id: string
+          submenu_key: string
+        }
+        Insert: {
+          can_access?: boolean | null
+          id?: string
+          module_key: string
+          profile_id: string
+          submenu_key: string
+        }
+        Update: {
+          can_access?: boolean | null
+          id?: string
+          module_key?: string
+          profile_id?: string
+          submenu_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_permissions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "permission_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -907,18 +960,21 @@ export type Database = {
         Row: {
           domaine_id: number | null
           id: string
+          permission_profile_id: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
           domaine_id?: number | null
           id?: string
+          permission_profile_id?: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
           domaine_id?: number | null
           id?: string
+          permission_profile_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
@@ -928,6 +984,13 @@ export type Database = {
             columns: ["domaine_id"]
             isOneToOne: false
             referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_permission_profile_id_fkey"
+            columns: ["permission_profile_id"]
+            isOneToOne: false
+            referencedRelation: "permission_profiles"
             referencedColumns: ["id"]
           },
         ]
