@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: primaryRole?.role ?? null,
       domaineId: domaineRole?.domaine_id ?? null,
       nomComplet: profileRes.data?.nom_complet ?? null,
-      email: profileRes.data?.email ?? null,
+      email: profileRes.data?.email ?? userEmail ?? null,
     });
   };
 
