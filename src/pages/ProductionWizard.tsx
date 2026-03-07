@@ -53,6 +53,7 @@ export default function ProductionWizard() {
   const navigate = useNavigate();
   const { user, userInfo } = useAuth();
   const isOnline = useOnlineStatus();
+  const isCentral = userInfo.role === "responsable_central";
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -263,6 +264,8 @@ export default function ProductionWizard() {
 
   const steps = ["Localisation", "Production", "Calibre", "Photo", "Récapitulatif"];
 
+  const selectedVariete = varietes.find((v) => v.id === watchedValues.variete_id);
+
   const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
   const calibreEntries = getCalibreEntries(calibreType);
   const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
@@ -271,8 +274,6 @@ export default function ProductionWizard() {
   const handleCalibreChange = (dbColumn: string, value: number) => {
     setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
   };
-
-  const selectedVariete = varietes.find((v) => v.id === watchedValues.variete_id);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
