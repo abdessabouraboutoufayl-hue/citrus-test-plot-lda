@@ -53,6 +53,7 @@ export default function ProductionWizard() {
   const navigate = useNavigate();
   const { user, userInfo } = useAuth();
   const isOnline = useOnlineStatus();
+  const isCentral = userInfo.role === "responsable_central";
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
