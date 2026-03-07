@@ -26,6 +26,8 @@ import AnalysesCroisees from "@/pages/AnalysesCroisees";
 import AnalyticsExports from "@/pages/AnalyticsExports";
 import AnalyticsRapportsAuto from "@/pages/AnalyticsRapportsAuto";
 import ProductionSaisieVariete from "@/pages/ProductionSaisieVariete";
+import ResetPassword from "@/pages/ResetPassword";
+import GestionUtilisateurs from "@/pages/GestionUtilisateurs";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +46,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
@@ -62,6 +65,7 @@ function AppRoutes() {
         <Route path="/phenologie/dashboard" element={<PhenologieDashboard />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/admin" element={<Administration />} />
+        <Route path="/admin/utilisateurs" element={<GestionUtilisateurs />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/analytics/executive" element={<AnalyticsExecutive />} />
         <Route path="/analytics/global" element={<AnalyticsGlobal />} />
