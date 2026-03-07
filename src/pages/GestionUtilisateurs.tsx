@@ -264,16 +264,39 @@ function UtilisateursGestionTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [selectedDomaineId, setSelectedDomaineId] = useState<string>("");
 
-  const { data: roles = [], isLoading } = useQuery({
-    queryKey: ["admin-user-roles-full"],
+  // Fetch all profiles (users) and their roles
+  const { data: allUsers = [], isLoading } = useQuery({
+    queryKey: ["admin-all-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get all profiles
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, email, nom_complet")
+        .order("email");
+      if (pErr) throw pErr;
+
+      // Get all user_roles
+      const { data: roles, error: rErr } = await supabase
         .from("user_roles")
-        .select("*, profiles:user_id(email, nom_complet), domaines:domaine_id(nom)")
-        .order("user_id");
-      if (error) throw error;
-      return data;
+        .select("*, domaines:domaine_id(nom)");
+      if (rErr) throw rErr;
+
+      // Merge: each profile with their role (if any)
+      return (profiles || []).map((p: any) => {
+        const userRole = (roles || []).find((r: any) => r.user_id === p.id);
+        return {
+          ...p,
+          role: userRole?.role || null,
+          domaine_id: userRole?.domaine_id || null,
+          domaine_nom: (userRole?.domaines as any)?.nom || null,
+          permission_profile_id: userRole?.permission_profile_id || null,
+          has_role: !!userRole,
+          role_id: userRole?.id || null,
+        };
+      });
     },
   });
 
