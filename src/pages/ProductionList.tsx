@@ -167,7 +167,7 @@ export default function ProductionList() {
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
-  useMemo(() => { setPage(1); }, [search, statutFilter, moisFilter]);
+  useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
