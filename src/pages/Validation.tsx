@@ -503,7 +503,7 @@ export default function Validation() {
                             <Button size="sm" onClick={() => validateQualiteMutation.mutate({ id: a.id, status: "Validé" })} disabled={validateQualiteMutation.isPending}>
                               <CheckCircle className="h-4 w-4 mr-1" /> Valider
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => setRejectIds([a.id])} disabled={validateQualiteMutation.isPending}>
+                            <Button size="sm" variant="destructive" onClick={() => { setRejectType("qualite"); setRejectIds([a.id]); }} disabled={validateQualiteMutation.isPending}>
                               <XCircle className="h-4 w-4 mr-1" /> Rejeter
                             </Button>
                           </>
