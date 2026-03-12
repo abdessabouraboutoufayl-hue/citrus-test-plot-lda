@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle, Info, Check } from "lucide-react";
 
 const schema = z.object({
   domaine_id: z.number().optional().nullable(),

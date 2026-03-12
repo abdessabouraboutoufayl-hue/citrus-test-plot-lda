@@ -49,9 +49,9 @@ export function AppSidebar() {
 
   const adminItems: typeof productionItems = [];
   if (userInfo.role === "responsable_central") {
-    adminItems.push({ title: "Validation", url: "/validation", icon: CheckSquare });
-    adminItems.push({ title: "Administration", url: "/admin", icon: Settings });
-    adminItems.push({ title: "Gestion utilisateurs", url: "/admin/utilisateurs", icon: Users });
+    adminItems.push({ title: "Validation", url: "/validation", icon: CheckSquare, permKey: "admin_validation" });
+    adminItems.push({ title: "Administration", url: "/admin", icon: Settings, permKey: "admin_administration" });
+    adminItems.push({ title: "Gestion utilisateurs", url: "/admin/utilisateurs", icon: Users, permKey: "admin_utilisateurs" });
   }
 
   return (
