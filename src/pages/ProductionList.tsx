@@ -80,7 +80,7 @@ export default function ProductionList() {
     queryFn: async () => {
       let query = supabase
         .from("production")
-        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
         .order("domaine_id", { ascending: true })
         .order("variete_id", { ascending: true })
         .order("porte_greffe_id", { ascending: true })
