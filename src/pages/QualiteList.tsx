@@ -56,6 +56,7 @@ export default function QualiteList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
+  const [campagneFilter, setCampagneFilter] = useState("all");
   const [moisFilter, setMoisFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
