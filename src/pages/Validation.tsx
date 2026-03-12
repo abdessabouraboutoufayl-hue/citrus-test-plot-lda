@@ -67,6 +67,7 @@ export default function Validation() {
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [rejectIds, setRejectIds] = useState<number[]>([]);
+  const [rejectType, setRejectType] = useState<"production" | "qualite">("production");
   const [rejectReasons, setRejectReasons] = useState<string[]>([]);
   const [rejectComment, setRejectComment] = useState("");
   const [viewItem, setViewItem] = useState<{ type: "production" | "qualite"; data: any } | null>(null);
@@ -133,7 +134,14 @@ export default function Validation() {
   const handleReject = () => {
     if (rejectIds.length === 0) return;
     const reasonText = [...rejectReasons, rejectComment].filter(Boolean).join(" | ");
-    validateProdMutation.mutate({ ids: rejectIds, status: "Rejeté", comment: reasonText });
+    if (rejectType === "qualite") {
+      // Reject each qualité item individually
+      rejectIds.forEach(id => {
+        validateQualiteMutation.mutate({ id, status: "Rejeté", comment: reasonText });
+      });
+    } else {
+      validateProdMutation.mutate({ ids: rejectIds, status: "Rejeté", comment: reasonText });
+    }
     setRejectIds([]);
     setRejectReasons([]);
     setRejectComment("");
@@ -315,7 +323,7 @@ export default function Validation() {
                 size="sm"
                 variant="destructive"
                 disabled={selectedIds.size === 0 || validateProdMutation.isPending}
-                onClick={() => { setRejectIds([...selectedIds]); }}
+                onClick={() => { setRejectType("production"); setRejectIds([...selectedIds]); }}
               >
                 <XCircle className="h-4 w-4 mr-1" /> Rejeter sélection ({selectedIds.size})
               </Button>
@@ -415,7 +423,7 @@ export default function Validation() {
                                         <Button size="icon" variant="ghost" className="h-7 w-7 text-success" onClick={() => validateProdMutation.mutate({ ids: [p.id], status: "Validé" })} disabled={validateProdMutation.isPending}>
                                           <CheckCircle className="h-4 w-4" />
                                         </Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setRejectIds([p.id])} disabled={validateProdMutation.isPending}>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { setRejectType("production"); setRejectIds([p.id]); }} disabled={validateProdMutation.isPending}>
                                           <XCircle className="h-4 w-4" />
                                         </Button>
                                       </>
@@ -495,7 +503,7 @@ export default function Validation() {
                             <Button size="sm" onClick={() => validateQualiteMutation.mutate({ id: a.id, status: "Validé" })} disabled={validateQualiteMutation.isPending}>
                               <CheckCircle className="h-4 w-4 mr-1" /> Valider
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => setRejectIds([a.id])} disabled={validateQualiteMutation.isPending}>
+                            <Button size="sm" variant="destructive" onClick={() => { setRejectType("qualite"); setRejectIds([a.id]); }} disabled={validateQualiteMutation.isPending}>
                               <XCircle className="h-4 w-4 mr-1" /> Rejeter
                             </Button>
                           </>
