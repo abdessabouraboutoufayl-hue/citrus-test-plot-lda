@@ -70,7 +70,7 @@ export default function QualiteList() {
     queryFn: async () => {
       let query = supabase
         .from("qualite_interne")
-        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
         .order("created_at", { ascending: false });
       if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
         query = query.eq("domaine_id", userInfo.domaineId);
