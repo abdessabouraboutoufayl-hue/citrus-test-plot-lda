@@ -19,7 +19,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Save, Camera, Info, Clock, CalendarDays } from "lucide-react";
+import { Save, Camera, Info, Clock, CalendarDays, CopyCheck } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 
@@ -179,6 +180,35 @@ export default function PhenologieSuivi() {
       return { ...prev, [varieteId]: { ...current, [field]: value } };
     });
   }, [lastDetailsMap, today]);
+
+  const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
+    const sourceEdit = edits[sourceVarieteId] || {
+      stade: lastDetailsMap[sourceVarieteId]?.stade || "",
+      date: today,
+      obs: "",
+      photo: false,
+      checked: false,
+    };
+    if (!sourceEdit.stade) {
+      toast.warning("Sélectionnez d'abord un stade pour ce code");
+      return;
+    }
+    setEdits((prev) => {
+      const updated = { ...prev };
+      for (const v of typeVarietes) {
+        const current = updated[v.id] || {
+          stade: lastDetailsMap[v.id]?.stade || "",
+          date: today,
+          obs: "",
+          photo: false,
+          checked: false,
+        };
+        updated[v.id] = { ...current, stade: sourceEdit.stade, checked: true };
+      }
+      return updated;
+    });
+    toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
+  }, [edits, lastDetailsMap, today, filteredVarietes]);
 
   // Progress stats
   const totalCodes = filteredVarietes.length;
@@ -423,20 +453,39 @@ export default function PhenologieSuivi() {
                                   <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground">{prevStade}</TableCell>
                                   <TableCell>
-                                    <Select
-                                      value={edit.stade || "none"}
-                                      onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue placeholder="Stade..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">—</SelectItem>
-                                        {STADES.map((s) => (
-                                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    <div className="flex items-center gap-1">
+                                      <Select
+                                        value={edit.stade || "none"}
+                                        onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs">
+                                          <SelectValue placeholder="Stade..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">—</SelectItem>
+                                          {STADES.map((s) => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 shrink-0"
+                                              onClick={() => duplicateStadeToType(v.id, group.varietes)}
+                                            >
+                                              <CopyCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top">
+                                            <p className="text-xs">Appliquer ce stade à tout le type</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <Input
