@@ -323,7 +323,7 @@ export default function Validation() {
                 size="sm"
                 variant="destructive"
                 disabled={selectedIds.size === 0 || validateProdMutation.isPending}
-                onClick={() => { setRejectIds([...selectedIds]); }}
+                onClick={() => { setRejectType("production"); setRejectIds([...selectedIds]); }}
               >
                 <XCircle className="h-4 w-4 mr-1" /> Rejeter sélection ({selectedIds.size})
               </Button>
