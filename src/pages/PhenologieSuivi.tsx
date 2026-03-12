@@ -19,7 +19,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Save, Camera, Info, Clock, CalendarDays } from "lucide-react";
+import { Save, Camera, Info, Clock, CalendarDays, CopyCheck } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 
