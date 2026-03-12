@@ -214,7 +214,7 @@ export default function ImportTemplateConfig({
       ["  _M = Mandarine/Clémentine (remplir si variété mandarine)"],
       ["  _N = Navel/Orange/Pomelo (remplir si variété navel)"],
       ["  Cal_HC = Hors calibre (partagé)"],
-      ["  Validation : total colonnes _M + Cal_HC = 30 OU total colonnes _N + Cal_HC = 30"],
+      [`  Validation : total colonnes _M + Cal_HC = ${NB_ECHANTILLON} OU total colonnes _N + Cal_HC = ${NB_ECHANTILLON}`],
       [""],
       ["Qualité : A, B, C, Hors norme"],
       ["Statut : Normal, Chétif, Manquant"],
