@@ -180,6 +180,35 @@ export default function PhenologieSuivi() {
     });
   }, [lastDetailsMap, today]);
 
+  const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
+    const sourceEdit = edits[sourceVarieteId] || {
+      stade: lastDetailsMap[sourceVarieteId]?.stade || "",
+      date: today,
+      obs: "",
+      photo: false,
+      checked: false,
+    };
+    if (!sourceEdit.stade) {
+      toast.warning("Sélectionnez d'abord un stade pour ce code");
+      return;
+    }
+    setEdits((prev) => {
+      const updated = { ...prev };
+      for (const v of typeVarietes) {
+        const current = updated[v.id] || {
+          stade: lastDetailsMap[v.id]?.stade || "",
+          date: today,
+          obs: "",
+          photo: false,
+          checked: false,
+        };
+        updated[v.id] = { ...current, stade: sourceEdit.stade, checked: true };
+      }
+      return updated;
+    });
+    toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
+  }, [edits, lastDetailsMap, today, filteredVarietes]);
+
   // Progress stats
   const totalCodes = filteredVarietes.length;
   const checkedCodes = Object.values(edits).filter((e) => e.checked).length;
