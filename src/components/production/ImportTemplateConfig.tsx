@@ -15,7 +15,7 @@ import {
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx-js-style";
-import { EXCEL_CALIBRE_COLUMNS } from "@/lib/calibre-config";
+import { EXCEL_CALIBRE_COLUMNS, NB_ECHANTILLON } from "@/lib/calibre-config";
 
 interface Variete {
   id: number;
