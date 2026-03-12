@@ -453,20 +453,39 @@ export default function PhenologieSuivi() {
                                   <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground">{prevStade}</TableCell>
                                   <TableCell>
-                                    <Select
-                                      value={edit.stade || "none"}
-                                      onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue placeholder="Stade..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">—</SelectItem>
-                                        {STADES.map((s) => (
-                                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    <div className="flex items-center gap-1">
+                                      <Select
+                                        value={edit.stade || "none"}
+                                        onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs">
+                                          <SelectValue placeholder="Stade..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">—</SelectItem>
+                                          {STADES.map((s) => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 shrink-0"
+                                              onClick={() => duplicateStadeToType(v.id, group.varietes)}
+                                            >
+                                              <CopyCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top">
+                                            <p className="text-xs">Appliquer ce stade à tout le type</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <Input
