@@ -60,7 +60,7 @@ const OPTIONAL_COLUMNS = [
   { key: "Qualite", label: "Qualité" },
   { key: "Recoltant", label: "Récoltant" },
   { key: "Statut", label: "Statut" },
-  { key: "Photo", label: "Photo" },
+  
   { key: "Observations", label: "Observations" },
 ];
 
