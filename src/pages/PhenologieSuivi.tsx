@@ -442,9 +442,23 @@ export default function PhenologieSuivi() {
                           {group.typeCode}
                         </span>
                         <span className="font-medium text-sm">{group.typeNom}</span>
-                        <span className="text-xs text-muted-foreground ml-auto mr-4">
-                          {groupChecked}/{group.varietes.length} codes
-                        </span>
+                        <div className="flex items-center gap-2 ml-auto mr-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
+                              checkAllType(group.varietes, !allChecked);
+                            }}
+                          >
+                            {group.varietes.every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
+                          </Button>
+                          <span className="text-xs text-muted-foreground">
+                            {groupChecked}/{group.varietes.length} codes
+                          </span>
+                        </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-0 pb-0">
