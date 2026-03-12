@@ -182,17 +182,35 @@ export default function PhenologieSuivi() {
   }, [lastDetailsMap, today]);
 
   const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
-    const sourceEdit = edits[sourceVarieteId] || {
-      stade: lastDetailsMap[sourceVarieteId]?.stade || "",
-      date: today,
-      obs: "",
-      photo: false,
-      checked: false,
-    };
-    if (!sourceEdit.stade) {
-      toast.warning("Sélectionnez d'abord un stade pour ce code");
-      return;
-    }
+    setEdits((prev) => {
+      const sourceEdit = prev[sourceVarieteId] || {
+        stade: lastDetailsMap[sourceVarieteId]?.stade || "",
+        date: today,
+        obs: "",
+        photo: false,
+        checked: false,
+      };
+      if (!sourceEdit.stade) {
+        toast.warning("Sélectionnez d'abord un stade pour ce code");
+        return prev;
+      }
+      const updated = { ...prev };
+      for (const v of typeVarietes) {
+        const current = updated[v.id] || {
+          stade: lastDetailsMap[v.id]?.stade || "",
+          date: today,
+          obs: "",
+          photo: false,
+          checked: false,
+        };
+        updated[v.id] = { ...current, stade: sourceEdit.stade, date: today, checked: true };
+      }
+      toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
+      return updated;
+    });
+  }, [lastDetailsMap, today]);
+
+  const checkAllType = useCallback((typeVarietes: typeof filteredVarietes, check: boolean) => {
     setEdits((prev) => {
       const updated = { ...prev };
       for (const v of typeVarietes) {
@@ -203,12 +221,11 @@ export default function PhenologieSuivi() {
           photo: false,
           checked: false,
         };
-        updated[v.id] = { ...current, stade: sourceEdit.stade, checked: true };
+        updated[v.id] = { ...current, checked: check };
       }
       return updated;
     });
-    toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
-  }, [edits, lastDetailsMap, today, filteredVarietes]);
+  }, [lastDetailsMap, today]);
 
   // Progress stats
   const totalCodes = filteredVarietes.length;
@@ -425,9 +442,23 @@ export default function PhenologieSuivi() {
                           {group.typeCode}
                         </span>
                         <span className="font-medium text-sm">{group.typeNom}</span>
-                        <span className="text-xs text-muted-foreground ml-auto mr-4">
-                          {groupChecked}/{group.varietes.length} codes
-                        </span>
+                        <div className="flex items-center gap-2 ml-auto mr-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
+                              checkAllType(group.varietes, !allChecked);
+                            }}
+                          >
+                            {group.varietes.every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
+                          </Button>
+                          <span className="text-xs text-muted-foreground">
+                            {groupChecked}/{group.varietes.length} codes
+                          </span>
+                        </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-0 pb-0">
