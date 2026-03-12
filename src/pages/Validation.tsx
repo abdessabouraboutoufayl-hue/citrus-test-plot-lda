@@ -134,7 +134,14 @@ export default function Validation() {
   const handleReject = () => {
     if (rejectIds.length === 0) return;
     const reasonText = [...rejectReasons, rejectComment].filter(Boolean).join(" | ");
-    validateProdMutation.mutate({ ids: rejectIds, status: "Rejeté", comment: reasonText });
+    if (rejectType === "qualite") {
+      // Reject each qualité item individually
+      rejectIds.forEach(id => {
+        validateQualiteMutation.mutate({ id, status: "Rejeté", comment: reasonText });
+      });
+    } else {
+      validateProdMutation.mutate({ ids: rejectIds, status: "Rejeté", comment: reasonText });
+    }
     setRejectIds([]);
     setRejectReasons([]);
     setRejectComment("");
