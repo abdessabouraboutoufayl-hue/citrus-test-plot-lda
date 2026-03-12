@@ -131,13 +131,14 @@ export default function ProductionList() {
         if (!match) return false;
       }
       if (statutFilter !== "all" && p.statut_validation !== statutFilter) return false;
+      if (campagneFilter !== "all" && p.campagne_id !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
         const m = new Date(p.date_recolte).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
-  }, [productions, search, statutFilter, moisFilter]);
+  }, [productions, search, statutFilter, campagneFilter, moisFilter]);
 
   // Sorting
   const sorted = useMemo(() => {
