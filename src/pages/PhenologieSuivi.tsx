@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,69 +7,53 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { SearchableSelect } from "@/components/SearchableSelect";
-import { toast } from "sonner";
-import { Info, Save, Copy } from "lucide-react";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { toast } from "sonner";
+import { Save, Camera, Info, Clock, CalendarDays } from "lucide-react";
+import { format, differenceInDays } from "date-fns";
+import { fr } from "date-fns/locale";
 
 const STADES = [
-  { key: "repos", num: 1, label: "Repos végétatif" },
-  { key: "debourrement", num: 2, label: "Débourrement" },
-  { key: "boutons_floraux", num: 3, label: "Boutons floraux" },
-  { key: "prefloraison", num: 4, label: "Pré-floraison" },
-  { key: "floraison", num: 5, label: "Floraison" },
-  { key: "chute_petales", num: 6, label: "Chute pétales" },
-  { key: "nouaison", num: 7, label: "Nouaison" },
-  { key: "chute_physio", num: 8, label: "Chute physio." },
-  { key: "grossissement", num: 9, label: "Grossissement" },
-  { key: "veraison", num: 10, label: "Véraison" },
-  { key: "debut_maturite", num: 11, label: "Début maturité" },
-  { key: "maturite_recolte", num: 12, label: "Maturité récolte" },
+  "Repos végétatif", "Débourrement", "Boutons floraux", "Pré-floraison",
+  "Floraison", "Chute pétales", "Nouaison", "Chute physio.",
+  "Grossissement", "Véraison", "Début maturité", "Maturité récolte",
 ];
 
-function getStadeDateField(key: string): string {
-  if (key === "debut_maturite") return "stade_debut_maturite_date";
-  if (key === "maturite_recolte") return "stade_maturite_recolte_date";
-  return `stade_${key}_date_debut`;
+const CYCLE_WINDOW_DAYS = 4;
+const CYCLE_INTERVAL_DAYS = 15;
+const AUTOSAVE_INTERVAL = 30000;
+
+interface DetailEdit {
+  stade: string;
+  date: string;
+  obs: string;
+  photo: boolean;
+  checked: boolean;
 }
 
-function getStadeObsField(key: string): string {
-  if (key === "debut_maturite") return "stade_debut_maturite_observations";
-  if (key === "maturite_recolte") return "stade_maturite_recolte_observations";
-  return `stade_${key}_observations`;
-}
-
-function getCurrentStade(record: any): string {
-  for (let i = STADES.length - 1; i >= 0; i--) {
-    const dateField = getStadeDateField(STADES[i].key);
-    if (record?.[dateField]) return STADES[i].key;
-  }
-  return "";
-}
-
-interface RowEdit {
-  stade?: string;
-  date?: string;
-  obs?: string;
-}
+type EditsMap = Record<number, DetailEdit>; // variete_id -> edit
 
 export default function PhenologieSuivi() {
   const { session, userInfo } = useAuth();
   const queryClient = useQueryClient();
+  const isCentral = userInfo.role === "responsable_central";
+  const today = new Date().toISOString().split("T")[0];
 
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
-  const [rowEdits, setRowEdits] = useState<Record<string, RowEdit>>({});
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [bulkDate, setBulkDate] = useState(new Date().toISOString().split("T")[0]);
-  const [bulkStade, setBulkStade] = useState("");
-  const isCentral = userInfo.role === "responsable_central";
+  const [edits, setEdits] = useState<EditsMap>({});
 
+  // --- Data queries ---
   const { data: campagnes } = useQuery({
     queryKey: ["campagnes"],
     queryFn: async () => {
@@ -97,184 +81,230 @@ export default function PhenologieSuivi() {
   const { data: domaineVarietes } = useQuery({
     queryKey: ["domaine-varietes", selectedDomaine],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("domaine_varietes")
-        .select("variete_id")
-        .eq("domaine_id", Number(selectedDomaine));
+      const { data } = await supabase.from("domaine_varietes").select("variete_id").eq("domaine_id", Number(selectedDomaine));
       return data || [];
     },
     enabled: !!selectedDomaine,
   });
 
-  const { data: phenoRecords } = useQuery({
-    queryKey: ["phenologie-list", selectedCampagne, selectedDomaine],
+  // Last observation for this domaine/campagne (for pre-fill)
+  const { data: lastObservation } = useQuery({
+    queryKey: ["last-observation", selectedCampagne, selectedDomaine],
     queryFn: async () => {
       const { data } = await supabase
-        .from("phenologie")
-        .select("*")
+        .from("observations_phenologie")
+        .select("*, phenologie_details(*)")
         .eq("campagne_id", Number(selectedCampagne))
-        .eq("domaine_id", Number(selectedDomaine));
-      return data || [];
+        .eq("domaine_id", Number(selectedDomaine))
+        .order("date_observation", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
     },
     enabled: !!selectedCampagne && !!selectedDomaine,
   });
 
-  const selectedDomaineObj = domaines?.find((d) => d.id.toString() === selectedDomaine);
-
-  const filteredVarietes = varietes?.filter((v) =>
-    domaineVarietes?.some((dv) => dv.variete_id === v.id)
-  ) || [];
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const tableRows = filteredVarietes.map((v) => {
-    const phenoRecord = phenoRecords?.find((r) => r.variete_id === v.id);
-    const currentStade = getCurrentStade(phenoRecord);
-    const edit = rowEdits[v.id.toString()];
-    const selectedStade = edit?.stade ?? currentStade;
-    // Get existing date/obs for the selected stade from DB
-    const existingDate = selectedStade && phenoRecord ? (phenoRecord as any)[getStadeDateField(selectedStade)] || "" : "";
-    const existingObs = selectedStade && phenoRecord ? (phenoRecord as any)[getStadeObsField(selectedStade)] || "" : "";
-    return {
-      varieteId: v.id,
-      domaineNom: selectedDomaineObj?.nom || "-",
-      typeVariete: v.types_varietes?.type_nom || "-",
-      typeCode: v.types_varietes?.type_code || "",
-      typeCouleur: v.types_varietes?.couleur_badge || "#888",
-      codeVariete: v.code_variete,
-      currentStade,
-      selectedStade,
-      stadeDate: edit?.date ?? existingDate,
-      stadeObs: edit?.obs ?? existingObs,
-      phenoRecord,
-    };
+  // Rappel for this domaine/campagne
+  const { data: rappel } = useQuery({
+    queryKey: ["rappel-pheno", selectedCampagne, selectedDomaine],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("rappels_phenologie")
+        .select("*")
+        .eq("campagne_id", Number(selectedCampagne))
+        .eq("domaine_id", Number(selectedDomaine))
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!selectedCampagne && !!selectedDomaine,
   });
 
-  const updateRowEdit = useCallback((varieteId: string, field: keyof RowEdit, value: string) => {
-    setRowEdits((prev) => ({
-      ...prev,
-      [varieteId]: { ...prev[varieteId], [field]: value },
-    }));
-  }, []);
+  // Filter varietes for this domaine
+  const filteredVarietes = useMemo(() => {
+    if (!varietes || !domaineVarietes) return [];
+    const ids = new Set(domaineVarietes.map((dv) => dv.variete_id));
+    return varietes.filter((v) => ids.has(v.id));
+  }, [varietes, domaineVarietes]);
 
-  const handleStadeChange = useCallback((varieteId: string, stadeKey: string) => {
-    // When stade changes, reset date to today and obs to empty for new stade
-    setRowEdits((prev) => ({
-      ...prev,
-      [varieteId]: { stade: stadeKey, date: today, obs: "" },
-    }));
-  }, [today]);
+  // Group by type
+  const typeGroups = useMemo(() => {
+    const groups: Record<string, { typeCode: string; typeNom: string; couleur: string; varietes: typeof filteredVarietes }> = {};
+    for (const v of filteredVarietes) {
+      const typeId = v.types_varietes?.id?.toString() || "0";
+      if (!groups[typeId]) {
+        groups[typeId] = {
+          typeCode: v.types_varietes?.type_code || "?",
+          typeNom: v.types_varietes?.type_nom || "Inconnu",
+          couleur: v.types_varietes?.couleur_badge || "#888",
+          varietes: [],
+        };
+      }
+      groups[typeId].varietes.push(v);
+    }
+    return Object.entries(groups).sort(([, a], [, b]) => a.typeCode.localeCompare(b.typeCode));
+  }, [filteredVarietes]);
 
-  const hasChanges = Object.keys(rowEdits).length > 0;
+  // Pre-fill from last observation
+  const lastDetailsMap = useMemo(() => {
+    const map: Record<number, { stade: string; obs: string }> = {};
+    if (lastObservation?.phenologie_details) {
+      for (const d of lastObservation.phenologie_details as any[]) {
+        map[d.variete_id] = { stade: d.stade_phenologique, obs: "" };
+      }
+    }
+    return map;
+  }, [lastObservation]);
 
-  const toggleRow = useCallback((id: string) => {
-    setSelectedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+  const getEdit = (varieteId: number): DetailEdit => {
+    if (edits[varieteId]) return edits[varieteId];
+    const prev = lastDetailsMap[varieteId];
+    return {
+      stade: prev?.stade || "",
+      date: today,
+      obs: "",
+      photo: false,
+      checked: false,
+    };
+  };
+
+  const updateEdit = useCallback((varieteId: number, field: keyof DetailEdit, value: any) => {
+    setEdits((prev) => {
+      const current = prev[varieteId] || {
+        stade: lastDetailsMap[varieteId]?.stade || "",
+        date: today,
+        obs: "",
+        photo: false,
+        checked: false,
+      };
+      return { ...prev, [varieteId]: { ...current, [field]: value } };
     });
-  }, []);
+  }, [lastDetailsMap, today]);
 
-  const toggleAll = useCallback(() => {
-    setSelectedRows((prev) =>
-      prev.size === tableRows.length
-        ? new Set()
-        : new Set(tableRows.map((r) => r.varieteId.toString()))
-    );
-  }, [tableRows]);
+  // Progress stats
+  const totalCodes = filteredVarietes.length;
+  const checkedCodes = Object.values(edits).filter((e) => e.checked).length;
+  const progressPct = totalCodes > 0 ? Math.round((checkedCodes / totalCodes) * 100) : 0;
 
-  const applyBulkDate = useCallback(() => {
-    if (selectedRows.size === 0) return;
-    setRowEdits((prev) => {
-      const next = { ...prev };
-      selectedRows.forEach((id) => {
-        next[id] = { ...next[id], date: bulkDate };
-      });
-      return next;
-    });
-    toast.success(`Date ${bulkDate} appliquée à ${selectedRows.size} ligne(s)`);
-  }, [selectedRows, bulkDate]);
+  const typesCompleted = useMemo(() => {
+    let done = 0;
+    for (const [, group] of typeGroups) {
+      const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
+      if (allChecked && group.varietes.length > 0) done++;
+    }
+    return done;
+  }, [typeGroups, edits]);
 
-  const applyBulkStade = useCallback(() => {
-    if (selectedRows.size === 0 || !bulkStade) return;
-    setRowEdits((prev) => {
-      const next = { ...prev };
-      selectedRows.forEach((id) => {
-        next[id] = { ...next[id], stade: bulkStade, date: next[id]?.date || today };
-      });
-      return next;
-    });
-    const label = STADES.find((s) => s.key === bulkStade)?.label || bulkStade;
-    toast.success(`Stade "${label}" appliqué à ${selectedRows.size} ligne(s)`);
-  }, [selectedRows, bulkStade, today]);
+  // Rappel display
+  const lastObsDate = rappel?.derniere_observation || lastObservation?.date_observation;
+  const nextDueDate = rappel?.prochaine_observation_due;
+  const daysSinceLast = lastObsDate ? differenceInDays(new Date(), new Date(lastObsDate)) : null;
+  const daysUntilNext = nextDueDate ? differenceInDays(new Date(nextDueDate), new Date()) : null;
 
+  // Cycle logic: determine if this is same cycle or new
+  const isNewCycle = useMemo(() => {
+    if (!lastObsDate) return true;
+    const refDate = lastObservation?.date_reference_cycle || lastObsDate;
+    const nextDue = new Date(refDate);
+    nextDue.setDate(nextDue.getDate() + CYCLE_INTERVAL_DAYS);
+    const windowStart = new Date(nextDue);
+    windowStart.setDate(windowStart.getDate() - CYCLE_WINDOW_DAYS);
+    const now = new Date();
+    // If within window of next due, it's same cycle continuation
+    // If past window, it's new cycle
+    return now > nextDue;
+  }, [lastObsDate, lastObservation]);
+
+  // Auto-save to localStorage
+  useEffect(() => {
+    const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
+    const interval = setInterval(() => {
+      if (Object.keys(edits).length > 0) {
+        localStorage.setItem(key, JSON.stringify(edits));
+      }
+    }, AUTOSAVE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [edits, selectedCampagne, selectedDomaine]);
+
+  // Load draft from localStorage on filter change
+  useEffect(() => {
+    if (!selectedCampagne || !selectedDomaine) return;
+    const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setEdits(parsed);
+        toast.info("Brouillon restauré depuis la sauvegarde locale");
+      } catch { /* ignore */ }
+    } else {
+      setEdits({});
+    }
+  }, [selectedCampagne, selectedDomaine]);
+
+  // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!session?.user?.id) throw new Error("Non connecté");
       if (!selectedCampagne || !selectedDomaine) throw new Error("Sélectionnez campagne et domaine");
 
-      for (const [varieteId, edit] of Object.entries(rowEdits)) {
-        const row = tableRows.find((r) => r.varieteId.toString() === varieteId);
-        if (!row) continue;
+      const checkedEdits = Object.entries(edits).filter(([, e]) => e.checked && e.stade);
+      if (checkedEdits.length === 0) throw new Error("Aucun code coché avec un stade");
 
-        const stadeKey = edit.stade ?? row.currentStade;
-        if (!stadeKey) continue;
+      // Determine date_reference_cycle
+      const dateRefCycle = isNewCycle ? today : (lastObservation?.date_reference_cycle || today);
 
-        const dateField = getStadeDateField(stadeKey);
-        const obsField = getStadeObsField(stadeKey);
-        const dateVal = edit.date ?? today;
-
-        const payload: any = {
+      // Create observation header
+      const { data: obs, error: obsErr } = await supabase
+        .from("observations_phenologie")
+        .insert({
           domaine_id: Number(selectedDomaine),
           campagne_id: Number(selectedCampagne),
-          variete_id: Number(varieteId),
-          date_observation: dateVal,
-          observateur_nom: userInfo.nomComplet || "Inconnu",
+          date_observation: today,
           user_id: session.user.id,
-          [dateField]: dateVal,
-          [obsField]: edit.obs || null,
-        };
+          observateur_nom: userInfo.nomComplet || "Inconnu",
+          date_reference_cycle: dateRefCycle,
+        })
+        .select()
+        .single();
+      if (obsErr) throw obsErr;
 
-        if (row.phenoRecord) {
-          const { error } = await supabase.from("phenologie").update(payload).eq("id", row.phenoRecord.id);
-          if (error) throw error;
-          await supabase.from("phenologie_observations").insert({
-            phenologie_id: row.phenoRecord.id,
-            date_observation: dateVal,
-            stades_observes: [STADES.find((s) => s.key === stadeKey)?.label],
-            notes: edit.obs || null,
-            observateur_nom: userInfo.nomComplet || "Inconnu",
-          });
-        } else {
-          const { data, error } = await supabase.from("phenologie").insert(payload).select().single();
-          if (error) throw error;
-          await supabase.from("phenologie_observations").insert({
-            phenologie_id: data.id,
-            date_observation: dateVal,
-            stades_observes: [STADES.find((s) => s.key === stadeKey)?.label],
-            notes: edit.obs || "Première observation",
-            observateur_nom: userInfo.nomComplet || "Inconnu",
-          });
-        }
-      }
+      // Insert details
+      const details = checkedEdits.map(([varieteId, edit]) => ({
+        observation_id: obs.id,
+        variete_id: Number(varieteId),
+        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || null,
+        stade_phenologique: edit.stade,
+        date_stade: edit.date || today,
+        observations: edit.obs || null,
+        photo_url: null,
+      }));
+
+      const { error: detErr } = await supabase.from("phenologie_details").insert(details);
+      if (detErr) throw detErr;
     },
     onSuccess: () => {
-      setRowEdits({});
-      queryClient.invalidateQueries({ queryKey: ["phenologie-list"] });
-      toast.success("Observations enregistrées");
+      const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
+      localStorage.removeItem(key);
+      setEdits({});
+      queryClient.invalidateQueries({ queryKey: ["last-observation"] });
+      queryClient.invalidateQueries({ queryKey: ["rappel-pheno"] });
+      toast.success(`Observation enregistrée (${Object.values(edits).filter(e => e.checked).length} codes)`);
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const selectedDomaineObj = domaines?.find((d) => d.id.toString() === selectedDomaine);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">🌸 Suivi Phénologique</h1>
         <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-          <Info className="h-4 w-4" /> Saisie par tableau — sélectionnez campagne et ferme
+          <Info className="h-4 w-4" /> Saisie par accordéons de types — sélectionnez campagne et ferme
         </p>
       </div>
 
+      {/* Filters */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <div>
           <Label className="text-xs mb-1 block">Campagne</Label>
@@ -303,150 +333,165 @@ export default function PhenologieSuivi() {
       </div>
 
       {selectedCampagne && selectedDomaine && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base">
-              Variétés — {selectedDomaineObj?.nom} ({tableRows.length})
-            </CardTitle>
-            {hasChanges && (
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm">
-                <Save className="h-4 w-4 mr-2" />
-                Enregistrer {Object.keys(rowEdits).length} modification(s)
-              </Button>
-            )}
-          </CardHeader>
-          {/* Bulk date action bar */}
-          {selectedRows.size > 0 && (
-            <div className="px-4 pb-3 flex items-center gap-3 flex-wrap border-b">
-              <span className="text-sm font-medium text-muted-foreground">
-                {selectedRows.size} ligne(s) sélectionnée(s)
-              </span>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  className="h-9 text-xs w-[160px]"
-                  value={bulkDate}
-                  onChange={(e) => setBulkDate(e.target.value)}
-                />
-                <Button size="sm" variant="outline" onClick={applyBulkDate}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Appliquer date
-                </Button>
+        <>
+          {/* Header stats */}
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Dernière observation</p>
+                    <p className="text-sm font-medium">
+                      {lastObsDate
+                        ? `${format(new Date(lastObsDate), "dd/MM/yyyy", { locale: fr })} (${daysSinceLast}j)`
+                        : "Aucune"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Prochaine due</p>
+                    <p className={`text-sm font-medium ${daysUntilNext !== null && daysUntilNext < 0 ? "text-destructive" : ""}`}>
+                      {nextDueDate
+                        ? `${format(new Date(nextDueDate), "dd/MM/yyyy", { locale: fr })} (${daysUntilNext !== null ? (daysUntilNext >= 0 ? `dans ${daysUntilNext}j` : `${Math.abs(daysUntilNext)}j de retard`) : ""})`
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Progression</p>
+                  <Progress value={progressPct} className="h-3" />
+                  <p className="text-xs text-muted-foreground mt-1">{checkedCodes}/{totalCodes} codes ({progressPct}%)</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Types complétés</p>
+                  <p className="text-sm font-medium">{typesCompleted}/{typeGroups.length}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Select value={bulkStade || "none"} onValueChange={(v) => setBulkStade(v === "none" ? "" : v)}>
-                  <SelectTrigger className="h-9 w-[200px] text-xs">
-                    <SelectValue placeholder="Stade..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Choisir stade —</SelectItem>
-                    {STADES.map((s) => (
-                      <SelectItem key={s.key} value={s.key}>{s.num}. {s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" onClick={applyBulkStade} disabled={!bulkStade}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Appliquer stade
-                </Button>
-              </div>
-            </div>
-          )}
-          <CardContent className="p-0">
-            {tableRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
+            </CardContent>
+          </Card>
+
+          {/* Accordion per type */}
+          {typeGroups.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground text-sm">
                 Aucune variété associée à cette ferme.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[40px]">
-                        <Checkbox
-                          checked={selectedRows.size === tableRows.length && tableRows.length > 0}
-                          onCheckedChange={toggleAll}
-                        />
-                      </TableHead>
-                      <TableHead className="w-[150px]">Domaine</TableHead>
-                      <TableHead className="w-[130px]">Type variété</TableHead>
-                      <TableHead className="w-[100px]">Code</TableHead>
-                      <TableHead className="w-[200px]">Stade phénologique</TableHead>
-                      <TableHead className="w-[150px]">Date du stade</TableHead>
-                      <TableHead className="min-w-[180px]">Observations</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tableRows.map((row) => {
-                      const vid = row.varieteId.toString();
-                      const hasEdit = rowEdits[vid] !== undefined;
-                      const isSelected = selectedRows.has(vid);
-                      return (
-                        <TableRow key={row.varieteId} className={hasEdit ? "bg-primary/5" : isSelected ? "bg-muted/50" : ""}>
-                          <TableCell>
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => toggleRow(vid)}
-                            />
-                          </TableCell>
-                          <TableCell className="text-sm">{row.domaineNom}</TableCell>
-                          <TableCell>
-                            <span
-                              className="inline-block px-2 py-0.5 rounded text-xs text-white font-medium"
-                              style={{ backgroundColor: row.typeCouleur }}
-                            >
-                              {row.typeCode}
-                            </span>
-                            <span className="ml-1.5 text-xs text-muted-foreground">{row.typeVariete}</span>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">{row.codeVariete}</TableCell>
-                          <TableCell>
-                            <Select
-                              value={row.selectedStade || "none"}
-                              onValueChange={(val) =>
-                                handleStadeChange(row.varieteId.toString(), val === "none" ? "" : val)
-                              }
-                            >
-                              <SelectTrigger className="w-full h-9 text-xs">
-                                <SelectValue placeholder="Aucun stade" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">— Aucun stade —</SelectItem>
-                                {STADES.map((s) => (
-                                  <SelectItem key={s.key} value={s.key}>
-                                    {s.num}. {s.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              className="h-9 text-xs w-full"
-                              value={row.stadeDate}
-                              onChange={(e) => updateRowEdit(vid, "date", e.target.value)}
-                              disabled={!row.selectedStade}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              className="h-9 text-xs w-full"
-                              placeholder="Notes..."
-                              value={row.stadeObs}
-                              onChange={(e) => updateRowEdit(vid, "obs", e.target.value)}
-                              disabled={!row.selectedStade}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <Accordion type="multiple" className="space-y-2">
+              {typeGroups.map(([typeId, group]) => {
+                const groupChecked = group.varietes.filter((v) => edits[v.id]?.checked).length;
+                return (
+                  <AccordionItem key={typeId} value={typeId} className="border rounded-lg bg-card">
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                      <div className="flex items-center gap-3 w-full">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded text-xs text-white font-medium"
+                          style={{ backgroundColor: group.couleur }}
+                        >
+                          {group.typeCode}
+                        </span>
+                        <span className="font-medium text-sm">{group.typeNom}</span>
+                        <span className="text-xs text-muted-foreground ml-auto mr-4">
+                          {groupChecked}/{group.varietes.length} codes
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-0 pb-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[80px]">Code</TableHead>
+                              <TableHead className="w-[140px]">Stade actuel</TableHead>
+                              <TableHead className="w-[200px]">Nouveau stade</TableHead>
+                              <TableHead className="w-[140px]">Date</TableHead>
+                              <TableHead className="min-w-[150px]">Obs</TableHead>
+                              <TableHead className="w-[40px]">📸</TableHead>
+                              <TableHead className="w-[40px]">✓</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.varietes.map((v) => {
+                              const edit = getEdit(v.id);
+                              const prevStade = lastDetailsMap[v.id]?.stade || "—";
+                              return (
+                                <TableRow key={v.id} className={edit.checked ? "bg-primary/5" : ""}>
+                                  <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">{prevStade}</TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={edit.stade || "none"}
+                                      onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="Stade..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">—</SelectItem>
+                                        {STADES.map((s) => (
+                                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="date"
+                                      className="h-8 text-xs"
+                                      value={edit.date}
+                                      onChange={(e) => updateEdit(v.id, "date", e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      className="h-8 text-xs"
+                                      placeholder="Observations..."
+                                      value={edit.obs}
+                                      onChange={(e) => updateEdit(v.id, "obs", e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={edit.photo}
+                                      onCheckedChange={(c) => updateEdit(v.id, "photo", !!c)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={edit.checked}
+                                      onCheckedChange={(c) => updateEdit(v.id, "checked", !!c)}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          )}
+
+          {/* Footer save */}
+          <div className="sticky bottom-4 z-10">
+            <Button
+              className="w-full sm:w-auto"
+              size="lg"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending || checkedCodes === 0}
+            >
+              <Save className="h-5 w-5 mr-2" />
+              💾 Enregistrer observation ({checkedCodes} code{checkedCodes > 1 ? "s" : ""})
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );
