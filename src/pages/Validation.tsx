@@ -67,6 +67,7 @@ export default function Validation() {
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [rejectIds, setRejectIds] = useState<number[]>([]);
+  const [rejectType, setRejectType] = useState<"production" | "qualite">("production");
   const [rejectReasons, setRejectReasons] = useState<string[]>([]);
   const [rejectComment, setRejectComment] = useState("");
   const [viewItem, setViewItem] = useState<{ type: "production" | "qualite"; data: any } | null>(null);
