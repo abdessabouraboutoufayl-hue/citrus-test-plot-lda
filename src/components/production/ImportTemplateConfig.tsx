@@ -324,7 +324,7 @@ export default function ImportTemplateConfig({
 
             {/* Profil calibre */}
             <div>
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Profil calibre (30 fruits)</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Profil calibre ({NB_ECHANTILLON} fruits)</h3>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox
                   checked={includeCalibres}
