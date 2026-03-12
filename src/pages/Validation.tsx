@@ -423,7 +423,7 @@ export default function Validation() {
                                         <Button size="icon" variant="ghost" className="h-7 w-7 text-success" onClick={() => validateProdMutation.mutate({ ids: [p.id], status: "Validé" })} disabled={validateProdMutation.isPending}>
                                           <CheckCircle className="h-4 w-4" />
                                         </Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setRejectIds([p.id])} disabled={validateProdMutation.isPending}>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { setRejectType("production"); setRejectIds([p.id]); }} disabled={validateProdMutation.isPending}>
                                           <XCircle className="h-4 w-4" />
                                         </Button>
                                       </>
