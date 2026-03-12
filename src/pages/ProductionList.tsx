@@ -249,6 +249,18 @@ export default function ProductionList() {
             <SelectItem value="Rejeté">Rejeté</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={campagneFilter} onValueChange={setCampagneFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes campagnes</SelectItem>
+            {[...new Map(productions.map((p: any) => [p.campagne_id, p.campagnes?.code_campagne])).entries()]
+              .filter(([, label]) => label)
+              .sort(([, a], [, b]) => (b as string).localeCompare(a as string))
+              .map(([id, label]) => (
+                <SelectItem key={id} value={String(id)}>{label as string}</SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
         <Select value={moisFilter} onValueChange={setMoisFilter}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Mois" /></SelectTrigger>
           <SelectContent>
