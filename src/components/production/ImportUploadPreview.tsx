@@ -394,46 +394,18 @@ export default function ImportUploadPreview({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Excel */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Excel rempli (.xlsx, .csv)</label>
-                  <div
-                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <FileSpreadsheet className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      {fileName || "Cliquez pour sélectionner"}
-                    </p>
-                  </div>
-                  <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Excel rempli (.xlsx, .csv)</label>
+                <div
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <FileSpreadsheet className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {fileName || "Cliquez pour sélectionner"}
+                  </p>
                 </div>
-
-                {/* Photos */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Photos (optionnel)</label>
-                  <div className="space-y-2">
-                    <div
-                      className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <Image className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                      <p className="text-xs text-muted-foreground">Multi-select .jpg/.png</p>
-                    </div>
-                    <div
-                      className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                      onClick={() => zipInputRef.current?.click()}
-                    >
-                      <Archive className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                      <p className="text-xs text-muted-foreground">ZIP (max 50MB)</p>
-                    </div>
-                  </div>
-                  {photoFileName && <Badge variant="secondary">{photoFileName}</Badge>}
-                  <input ref={photoInputRef} type="file" accept=".jpg,.jpeg,.png,.webp" multiple className="hidden" onChange={handlePhotoUpload} />
-                  <input ref={zipInputRef} type="file" accept=".zip" className="hidden" onChange={handleZipUpload} />
-                  <p className="text-xs text-muted-foreground">Convention : Code_PG_LignePosition.jpg</p>
-                </div>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
               </div>
             </CardContent>
           </CollapsibleContent>
