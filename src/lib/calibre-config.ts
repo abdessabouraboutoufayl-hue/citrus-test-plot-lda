@@ -68,7 +68,7 @@ export function getCalibreEntries(type: CalibreType): CalibreEntry[] {
   return [];
 }
 
-export const NB_ECHANTILLON = 30;
+export const NB_ECHANTILLON = 100;
 
 /** Build a calibre values map from DB column values */
 export function calibreFromRecord(record: Record<string, any>, type: CalibreType): Record<string, number> {

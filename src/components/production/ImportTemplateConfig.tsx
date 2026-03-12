@@ -15,7 +15,7 @@ import {
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx-js-style";
-import { EXCEL_CALIBRE_COLUMNS } from "@/lib/calibre-config";
+import { EXCEL_CALIBRE_COLUMNS, NB_ECHANTILLON } from "@/lib/calibre-config";
 
 interface Variete {
   id: number;
@@ -214,7 +214,7 @@ export default function ImportTemplateConfig({
       ["  _M = Mandarine/Clémentine (remplir si variété mandarine)"],
       ["  _N = Navel/Orange/Pomelo (remplir si variété navel)"],
       ["  Cal_HC = Hors calibre (partagé)"],
-      ["  Validation : total colonnes _M + Cal_HC = 30 OU total colonnes _N + Cal_HC = 30"],
+      [`  Validation : total colonnes _M + Cal_HC = ${NB_ECHANTILLON} OU total colonnes _N + Cal_HC = ${NB_ECHANTILLON}`],
       [""],
       ["Qualité : A, B, C, Hors norme"],
       ["Statut : Normal, Chétif, Manquant"],
@@ -324,7 +324,7 @@ export default function ImportTemplateConfig({
 
             {/* Profil calibre */}
             <div>
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Profil calibre (30 fruits)</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Profil calibre ({NB_ECHANTILLON} fruits)</h3>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox
                   checked={includeCalibres}
