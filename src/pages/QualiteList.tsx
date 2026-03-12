@@ -176,7 +176,7 @@ export default function QualiteList() {
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
 
   // Reset page when filters change
-  useMemo(() => { setPage(1); }, [search, statutFilter, moisFilter]);
+  useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
