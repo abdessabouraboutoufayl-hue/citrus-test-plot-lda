@@ -56,6 +56,7 @@ export default function QualiteList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
+  const [campagneFilter, setCampagneFilter] = useState("all");
   const [moisFilter, setMoisFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
@@ -69,7 +70,7 @@ export default function QualiteList() {
     queryFn: async () => {
       let query = supabase
         .from("qualite_interne")
-        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
         .order("created_at", { ascending: false });
       if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
         query = query.eq("domaine_id", userInfo.domaineId);
@@ -136,14 +137,14 @@ export default function QualiteList() {
       }
       // Statut
       if (statutFilter !== "all" && a.statut_validation !== statutFilter) return false;
-      // Mois
+      if (campagneFilter !== "all" && a.campagne_id !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
         const m = new Date(a.date_analyse).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
-  }, [analyses, search, statutFilter, moisFilter]);
+  }, [analyses, search, statutFilter, campagneFilter, moisFilter]);
 
   // Sorting
   const sorted = useMemo(() => {
@@ -175,7 +176,7 @@ export default function QualiteList() {
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
 
   // Reset page when filters change
-  useMemo(() => { setPage(1); }, [search, statutFilter, moisFilter]);
+  useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -259,6 +260,18 @@ export default function QualiteList() {
             <SelectItem value="Soumis">Soumis</SelectItem>
             <SelectItem value="Validé">Validé</SelectItem>
             <SelectItem value="Rejeté">Rejeté</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={campagneFilter} onValueChange={setCampagneFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes campagnes</SelectItem>
+            {[...new Map(analyses.map((a: any) => [a.campagne_id, a.campagnes?.code_campagne])).entries()]
+              .filter(([, label]) => label)
+              .sort(([, a], [, b]) => (b as string).localeCompare(a as string))
+              .map(([id, label]) => (
+                <SelectItem key={id} value={String(id)}>{label as string}</SelectItem>
+              ))}
           </SelectContent>
         </Select>
         <Select value={moisFilter} onValueChange={setMoisFilter}>

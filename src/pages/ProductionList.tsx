@@ -53,6 +53,7 @@ export default function ProductionList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("all");
+  const [campagneFilter, setCampagneFilter] = useState("all");
   const [moisFilter, setMoisFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
@@ -79,7 +80,7 @@ export default function ProductionList() {
     queryFn: async () => {
       let query = supabase
         .from("production")
-        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code)")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
         .order("domaine_id", { ascending: true })
         .order("variete_id", { ascending: true })
         .order("porte_greffe_id", { ascending: true })
@@ -130,13 +131,14 @@ export default function ProductionList() {
         if (!match) return false;
       }
       if (statutFilter !== "all" && p.statut_validation !== statutFilter) return false;
+      if (campagneFilter !== "all" && p.campagne_id !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
         const m = new Date(p.date_recolte).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
-  }, [productions, search, statutFilter, moisFilter]);
+  }, [productions, search, statutFilter, campagneFilter, moisFilter]);
 
   // Sorting
   const sorted = useMemo(() => {
@@ -165,7 +167,7 @@ export default function ProductionList() {
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
-  useMemo(() => { setPage(1); }, [search, statutFilter, moisFilter]);
+  useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -245,6 +247,18 @@ export default function ProductionList() {
             <SelectItem value="Soumis">Soumis</SelectItem>
             <SelectItem value="Validé">Validé</SelectItem>
             <SelectItem value="Rejeté">Rejeté</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={campagneFilter} onValueChange={setCampagneFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes campagnes</SelectItem>
+            {[...new Map(productions.map((p: any) => [p.campagne_id, p.campagnes?.code_campagne])).entries()]
+              .filter(([, label]) => label)
+              .sort(([, a], [, b]) => (b as string).localeCompare(a as string))
+              .map(([id, label]) => (
+                <SelectItem key={id} value={String(id)}>{label as string}</SelectItem>
+              ))}
           </SelectContent>
         </Select>
         <Select value={moisFilter} onValueChange={setMoisFilter}>
