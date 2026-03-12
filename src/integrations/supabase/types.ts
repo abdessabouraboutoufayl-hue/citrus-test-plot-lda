@@ -201,6 +201,57 @@ export type Database = {
         }
         Relationships: []
       }
+      observations_phenologie: {
+        Row: {
+          campagne_id: number
+          created_at: string | null
+          date_observation: string
+          date_reference_cycle: string | null
+          domaine_id: number
+          id: number
+          nb_codes_saisis: number | null
+          observateur_nom: string
+          user_id: string
+        }
+        Insert: {
+          campagne_id: number
+          created_at?: string | null
+          date_observation: string
+          date_reference_cycle?: string | null
+          domaine_id: number
+          id?: number
+          nb_codes_saisis?: number | null
+          observateur_nom: string
+          user_id: string
+        }
+        Update: {
+          campagne_id?: number
+          created_at?: string | null
+          date_observation?: string
+          date_reference_cycle?: string | null
+          domaine_id?: number
+          id?: number
+          nb_codes_saisis?: number | null
+          observateur_nom?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "observations_phenologie_campagne_id_fkey"
+            columns: ["campagne_id"]
+            isOneToOne: false
+            referencedRelation: "campagnes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "observations_phenologie_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permission_profiles: {
         Row: {
           created_at: string | null
@@ -402,6 +453,57 @@ export type Database = {
           },
           {
             foreignKeyName: "phenologie_variete_id_fkey"
+            columns: ["variete_id"]
+            isOneToOne: false
+            referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phenologie_details: {
+        Row: {
+          created_at: string | null
+          date_stade: string | null
+          id: number
+          observation_id: number
+          observations: string | null
+          photo_url: string | null
+          stade_phenologique: string
+          stade_precedent: string | null
+          variete_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          date_stade?: string | null
+          id?: number
+          observation_id: number
+          observations?: string | null
+          photo_url?: string | null
+          stade_phenologique: string
+          stade_precedent?: string | null
+          variete_id: number
+        }
+        Update: {
+          created_at?: string | null
+          date_stade?: string | null
+          id?: number
+          observation_id?: number
+          observations?: string | null
+          photo_url?: string | null
+          stade_phenologique?: string
+          stade_precedent?: string | null
+          variete_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phenologie_details_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "observations_phenologie"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phenologie_details_variete_id_fkey"
             columns: ["variete_id"]
             isOneToOne: false
             referencedRelation: "varietes"
@@ -854,6 +956,48 @@ export type Database = {
             columns: ["variete_id"]
             isOneToOne: false
             referencedRelation: "varietes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rappels_phenologie: {
+        Row: {
+          campagne_id: number
+          derniere_observation: string | null
+          domaine_id: number
+          id: number
+          notification_envoyee: boolean | null
+          prochaine_observation_due: string | null
+        }
+        Insert: {
+          campagne_id: number
+          derniere_observation?: string | null
+          domaine_id: number
+          id?: number
+          notification_envoyee?: boolean | null
+          prochaine_observation_due?: string | null
+        }
+        Update: {
+          campagne_id?: number
+          derniere_observation?: string | null
+          domaine_id?: number
+          id?: number
+          notification_envoyee?: boolean | null
+          prochaine_observation_due?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rappels_phenologie_campagne_id_fkey"
+            columns: ["campagne_id"]
+            isOneToOne: false
+            referencedRelation: "campagnes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rappels_phenologie_domaine_id_fkey"
+            columns: ["domaine_id"]
+            isOneToOne: false
+            referencedRelation: "domaines"
             referencedColumns: ["id"]
           },
         ]
