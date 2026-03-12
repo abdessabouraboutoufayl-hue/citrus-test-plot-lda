@@ -137,14 +137,14 @@ export default function QualiteList() {
       }
       // Statut
       if (statutFilter !== "all" && a.statut_validation !== statutFilter) return false;
-      // Mois
+      if (campagneFilter !== "all" && a.campagne_id !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
         const m = new Date(a.date_analyse).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
-  }, [analyses, search, statutFilter, moisFilter]);
+  }, [analyses, search, statutFilter, campagneFilter, moisFilter]);
 
   // Sorting
   const sorted = useMemo(() => {
