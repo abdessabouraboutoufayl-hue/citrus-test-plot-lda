@@ -1,4 +1,5 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Citrus, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
+import logoDA from "@/assets/logo-domaines-agricoles.png";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -59,7 +60,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <div className="flex items-center gap-2 px-4 py-4">
-            <Citrus className="h-8 w-8 text-sidebar-primary" />
+            <img src={logoDA} alt="Les Domaines Agricoles" className="h-10" />
             <div>
               <h2 className="text-sm font-bold text-sidebar-foreground">R&D Variétal</h2>
               <p className="text-xs text-sidebar-foreground/60">Production Agrumes</p>
