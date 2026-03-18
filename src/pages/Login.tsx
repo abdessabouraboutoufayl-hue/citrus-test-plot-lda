@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Citrus } from "lucide-react";
 import { toast } from "sonner";
+import logoDA from "@/assets/logo-domaines-agricoles.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
