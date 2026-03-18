@@ -63,8 +63,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <Citrus className="h-8 w-8 text-primary" />
+          <div className="mx-auto mb-4">
+            <img src={logoDA} alt="Les Domaines Agricoles" className="h-20 mx-auto" />
           </div>
           <CardTitle className="text-2xl">R&D Variétal</CardTitle>
           <CardDescription>Suivi de Production Agrumes</CardDescription>
