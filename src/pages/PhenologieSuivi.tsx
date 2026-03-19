@@ -225,7 +225,7 @@ export default function PhenologieSuivi() {
     setEdits((prev) => {
       const sourceEdit = prev[sourceVarieteId] || {
         stade: lastDetailsMap[sourceVarieteId]?.stade || "",
-        date: today,
+        date: observationDate,
         obs: "",
         photo: false,
         checked: false,
@@ -238,17 +238,17 @@ export default function PhenologieSuivi() {
       for (const v of typeVarietes) {
         const current = updated[v.id] || {
           stade: lastDetailsMap[v.id]?.stade || "",
-          date: today,
+          date: observationDate,
           obs: "",
           photo: false,
           checked: false,
         };
-        updated[v.id] = { ...current, stade: sourceEdit.stade, date: today, checked: true };
+        updated[v.id] = { ...current, stade: sourceEdit.stade, date: observationDate, checked: true };
       }
       toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
       return updated;
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   const checkAllType = useCallback((typeVarietes: typeof filteredVarietes, check: boolean) => {
     setEdits((prev) => {
@@ -256,7 +256,7 @@ export default function PhenologieSuivi() {
       for (const v of typeVarietes) {
         const current = updated[v.id] || {
           stade: lastDetailsMap[v.id]?.stade || "",
-          date: today,
+          date: observationDate,
           obs: "",
           photo: false,
           checked: false,
@@ -265,7 +265,7 @@ export default function PhenologieSuivi() {
       }
       return updated;
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   // Progress stats (include already saved codes)
   const alreadySavedCount = useMemo(() => {
