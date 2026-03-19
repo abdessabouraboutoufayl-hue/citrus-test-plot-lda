@@ -105,6 +105,21 @@ export default function PhenologieSuivi() {
     enabled: !!selectedCampagne && !!selectedDomaine,
   });
 
+  // All details already saved for the current cycle (to detect already-done codes)
+  const { data: cycleObservations } = useQuery({
+    queryKey: ["cycle-observations", selectedCampagne, selectedDomaine],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("observations_phenologie")
+        .select("*, phenologie_details(*)")
+        .eq("campagne_id", Number(selectedCampagne))
+        .eq("domaine_id", Number(selectedDomaine))
+        .order("date_observation", { ascending: false });
+      return data || [];
+    },
+    enabled: !!selectedCampagne && !!selectedDomaine,
+  });
+
   // Rappel for this domaine/campagne
   const { data: rappel } = useQuery({
     queryKey: ["rappel-pheno", selectedCampagne, selectedDomaine],
