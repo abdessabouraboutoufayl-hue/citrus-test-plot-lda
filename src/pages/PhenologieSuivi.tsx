@@ -105,6 +105,21 @@ export default function PhenologieSuivi() {
     enabled: !!selectedCampagne && !!selectedDomaine,
   });
 
+  // All details already saved for the current cycle (to detect already-done codes)
+  const { data: cycleObservations } = useQuery({
+    queryKey: ["cycle-observations", selectedCampagne, selectedDomaine],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("observations_phenologie")
+        .select("*, phenologie_details(*)")
+        .eq("campagne_id", Number(selectedCampagne))
+        .eq("domaine_id", Number(selectedDomaine))
+        .order("date_observation", { ascending: false });
+      return data || [];
+    },
+    enabled: !!selectedCampagne && !!selectedDomaine,
+  });
+
   // Rappel for this domaine/campagne
   const { data: rappel } = useQuery({
     queryKey: ["rappel-pheno", selectedCampagne, selectedDomaine],
@@ -155,6 +170,30 @@ export default function PhenologieSuivi() {
     }
     return map;
   }, [lastObservation]);
+
+  // Already-saved variete IDs in the current cycle (from the most recent observation)
+  const alreadySavedMap = useMemo(() => {
+    const map: Record<number, { stade: string; date: string; obs: string }> = {};
+    if (!cycleObservations || cycleObservations.length === 0) return map;
+    // The latest observation is the current cycle reference
+    const latestObs = cycleObservations[0];
+    if (!latestObs) return map;
+    const refDate = latestObs.date_reference_cycle || latestObs.date_observation;
+    // Collect all details from observations sharing the same cycle reference
+    for (const obs of cycleObservations) {
+      const obsRef = obs.date_reference_cycle || obs.date_observation;
+      if (obsRef === refDate) {
+        for (const d of (obs.phenologie_details || []) as any[]) {
+          map[d.variete_id] = {
+            stade: d.stade_phenologique,
+            date: d.date_stade || obs.date_observation,
+            obs: d.observations || "",
+          };
+        }
+      }
+    }
+    return map;
+  }, [cycleObservations]);
 
   const getEdit = (varieteId: number): DetailEdit => {
     if (edits[varieteId]) return edits[varieteId];
@@ -227,19 +266,23 @@ export default function PhenologieSuivi() {
     });
   }, [lastDetailsMap, today]);
 
-  // Progress stats
+  // Progress stats (include already saved codes)
+  const alreadySavedCount = useMemo(() => {
+    return filteredVarietes.filter(v => alreadySavedMap[v.id]).length;
+  }, [filteredVarietes, alreadySavedMap]);
   const totalCodes = filteredVarietes.length;
-  const checkedCodes = Object.values(edits).filter((e) => e.checked).length;
+  const newCheckedCodes = Object.entries(edits).filter(([vid, e]) => e.checked && !alreadySavedMap[Number(vid)]).length;
+  const checkedCodes = alreadySavedCount + newCheckedCodes;
   const progressPct = totalCodes > 0 ? Math.round((checkedCodes / totalCodes) * 100) : 0;
 
   const typesCompleted = useMemo(() => {
     let done = 0;
     for (const [, group] of typeGroups) {
-      const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
-      if (allChecked && group.varietes.length > 0) done++;
+      const allDone = group.varietes.every((v) => alreadySavedMap[v.id] || edits[v.id]?.checked);
+      if (allDone && group.varietes.length > 0) done++;
     }
     return done;
-  }, [typeGroups, edits]);
+  }, [typeGroups, edits, alreadySavedMap]);
 
   // Rappel display
   const lastObsDate = rappel?.derniere_observation || lastObservation?.date_observation;
@@ -294,32 +337,43 @@ export default function PhenologieSuivi() {
       if (!session?.user?.id) throw new Error("Non connecté");
       if (!selectedCampagne || !selectedDomaine) throw new Error("Sélectionnez campagne et domaine");
 
-      const checkedEdits = Object.entries(edits).filter(([, e]) => e.checked && e.stade);
-      if (checkedEdits.length === 0) throw new Error("Aucun code coché avec un stade");
+      // Only save NEW codes (not already saved in current cycle)
+      const checkedEdits = Object.entries(edits).filter(
+        ([vid, e]) => e.checked && e.stade && !alreadySavedMap[Number(vid)]
+      );
+      if (checkedEdits.length === 0) throw new Error("Aucun nouveau code coché avec un stade");
 
       // Determine date_reference_cycle
       const dateRefCycle = isNewCycle ? today : (lastObservation?.date_reference_cycle || today);
 
-      // Create observation header
-      const { data: obs, error: obsErr } = await supabase
-        .from("observations_phenologie")
-        .insert({
-          domaine_id: Number(selectedDomaine),
-          campagne_id: Number(selectedCampagne),
-          date_observation: today,
-          user_id: session.user.id,
-          observateur_nom: userInfo.nomComplet || "Inconnu",
-          date_reference_cycle: dateRefCycle,
-        })
-        .select()
-        .single();
-      if (obsErr) throw obsErr;
+      let observationId: number;
+
+      // If continuing the same cycle and last observation exists, add to it
+      if (!isNewCycle && lastObservation?.id) {
+        observationId = lastObservation.id;
+      } else {
+        // Create new observation header
+        const { data: obs, error: obsErr } = await supabase
+          .from("observations_phenologie")
+          .insert({
+            domaine_id: Number(selectedDomaine),
+            campagne_id: Number(selectedCampagne),
+            date_observation: today,
+            user_id: session.user.id,
+            observateur_nom: userInfo.nomComplet || "Inconnu",
+            date_reference_cycle: dateRefCycle,
+          })
+          .select()
+          .single();
+        if (obsErr) throw obsErr;
+        observationId = obs.id;
+      }
 
       // Insert details
       const details = checkedEdits.map(([varieteId, edit]) => ({
-        observation_id: obs.id,
+        observation_id: observationId,
         variete_id: Number(varieteId),
-        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || null,
+        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || alreadySavedMap[Number(varieteId)]?.stade || null,
         stade_phenologique: edit.stade,
         date_stade: edit.date || today,
         observations: edit.obs || null,
@@ -334,8 +388,9 @@ export default function PhenologieSuivi() {
       localStorage.removeItem(key);
       setEdits({});
       queryClient.invalidateQueries({ queryKey: ["last-observation"] });
+      queryClient.invalidateQueries({ queryKey: ["cycle-observations"] });
       queryClient.invalidateQueries({ queryKey: ["rappel-pheno"] });
-      toast.success(`Observation enregistrée (${Object.values(edits).filter(e => e.checked).length} codes)`);
+      toast.success(`Observation enregistrée (${newCheckedCodes} codes ajoutés)`);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -449,14 +504,15 @@ export default function PhenologieSuivi() {
                             className="h-6 px-2 text-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
-                              checkAllType(group.varietes, !allChecked);
+                              const remainingVarietes = group.varietes.filter(v => !alreadySavedMap[v.id]);
+                              const allChecked = remainingVarietes.every((v) => edits[v.id]?.checked);
+                              checkAllType(remainingVarietes, !allChecked);
                             }}
                           >
-                            {group.varietes.every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
+                            {group.varietes.filter(v => !alreadySavedMap[v.id]).every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
                           </Button>
                           <span className="text-xs text-muted-foreground">
-                            {groupChecked}/{group.varietes.length} codes
+                            {groupChecked + group.varietes.filter(v => alreadySavedMap[v.id]).length}/{group.varietes.length} codes
                           </span>
                         </div>
                       </div>
@@ -477,6 +533,23 @@ export default function PhenologieSuivi() {
                           </TableHeader>
                           <TableBody>
                             {group.varietes.map((v) => {
+                              const saved = alreadySavedMap[v.id];
+                              if (saved) {
+                                // Already saved in current cycle - show as done
+                                return (
+                                  <TableRow key={v.id} className="bg-primary/10 opacity-70">
+                                    <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{saved.stade}</TableCell>
+                                    <TableCell className="text-sm font-medium text-primary">✅ {saved.stade}</TableCell>
+                                    <TableCell className="text-xs">{saved.date ? format(new Date(saved.date), "dd/MM/yyyy", { locale: fr }) : "—"}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{saved.obs || "—"}</TableCell>
+                                    <TableCell>—</TableCell>
+                                    <TableCell>
+                                      <Checkbox checked disabled />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
                               const edit = getEdit(v.id);
                               const prevStade = lastDetailsMap[v.id]?.stade || "—";
                               return (
@@ -506,13 +579,13 @@ export default function PhenologieSuivi() {
                                               variant="ghost"
                                               size="icon"
                                               className="h-7 w-7 shrink-0"
-                                              onClick={() => duplicateStadeToType(v.id, group.varietes)}
+                                              onClick={() => duplicateStadeToType(v.id, group.varietes.filter(vv => !alreadySavedMap[vv.id]))}
                                             >
                                               <CopyCheck className="h-3.5 w-3.5 text-muted-foreground" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent side="top">
-                                            <p className="text-xs">Appliquer ce stade à tout le type</p>
+                                            <p className="text-xs">Appliquer ce stade aux codes restants</p>
                                           </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
@@ -560,15 +633,20 @@ export default function PhenologieSuivi() {
           )}
 
           {/* Footer save */}
-          <div className="sticky bottom-4 z-10">
+          <div className="sticky bottom-4 z-10 flex items-center gap-3 flex-wrap">
+            {alreadySavedCount > 0 && (
+              <span className="text-sm text-muted-foreground bg-card px-3 py-2 rounded-md border">
+                ✅ {alreadySavedCount} code{alreadySavedCount > 1 ? "s" : ""} déjà saisi{alreadySavedCount > 1 ? "s" : ""} · {totalCodes - alreadySavedCount} restant{totalCodes - alreadySavedCount > 1 ? "s" : ""}
+              </span>
+            )}
             <Button
               className="w-full sm:w-auto"
               size="lg"
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || checkedCodes === 0}
+              disabled={saveMutation.isPending || newCheckedCodes === 0}
             >
               <Save className="h-5 w-5 mr-2" />
-              💾 Enregistrer observation ({checkedCodes} code{checkedCodes > 1 ? "s" : ""})
+              💾 Enregistrer ({newCheckedCodes} nouveau{newCheckedCodes > 1 ? "x" : ""} code{newCheckedCodes > 1 ? "s" : ""})
             </Button>
           </div>
         </>

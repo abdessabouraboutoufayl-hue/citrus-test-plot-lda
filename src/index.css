@@ -94,7 +94,13 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans cursor-default;
     font-family: 'Inter', sans-serif;
+  }
+  a, button, [role="button"], input, select, textarea, label[for] {
+    cursor: pointer;
+  }
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="search"], textarea {
+    cursor: text;
   }
 }

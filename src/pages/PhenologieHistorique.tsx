@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,8 +18,12 @@ import { Download, Eye } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
 export default function PhenologieHistorique() {
+  const { userInfo } = useAuth();
+  const isCentral = userInfo.role === "responsable_central" || userInfo.role === "direction";
   const [selectedCampagne, setSelectedCampagne] = useState("");
-  const [selectedDomaine, setSelectedDomaine] = useState("");
+  const [selectedDomaine, setSelectedDomaine] = useState(
+    !isCentral && userInfo.domaineId ? userInfo.domaineId.toString() : ""
+  );
   const [expandedObs, setExpandedObs] = useState<string[]>([]);
 
   const { data: campagnes } = useQuery({
@@ -115,12 +120,18 @@ export default function PhenologieHistorique() {
             </div>
             <div>
               <Label className="text-xs mb-1 block">Ferme</Label>
-              <SearchableSelect
-                options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))]}
-                value={selectedDomaine}
-                onValueChange={setSelectedDomaine}
-                placeholder="Toutes"
-              />
+              {isCentral ? (
+                <SearchableSelect
+                  options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))]}
+                  value={selectedDomaine}
+                  onValueChange={setSelectedDomaine}
+                  placeholder="Toutes"
+                />
+              ) : (
+                <div className="h-10 flex items-center px-3 rounded-md border bg-muted text-sm">
+                  {domaines?.find(d => d.id.toString() === selectedDomaine)?.nom || "—"}
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
