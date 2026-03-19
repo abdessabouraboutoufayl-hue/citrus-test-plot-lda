@@ -219,7 +219,7 @@ export default function PhenologieSuivi() {
       };
       return { ...prev, [varieteId]: { ...current, [field]: value } };
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
     setEdits((prev) => {
