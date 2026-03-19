@@ -337,32 +337,43 @@ export default function PhenologieSuivi() {
       if (!session?.user?.id) throw new Error("Non connecté");
       if (!selectedCampagne || !selectedDomaine) throw new Error("Sélectionnez campagne et domaine");
 
-      const checkedEdits = Object.entries(edits).filter(([, e]) => e.checked && e.stade);
-      if (checkedEdits.length === 0) throw new Error("Aucun code coché avec un stade");
+      // Only save NEW codes (not already saved in current cycle)
+      const checkedEdits = Object.entries(edits).filter(
+        ([vid, e]) => e.checked && e.stade && !alreadySavedMap[Number(vid)]
+      );
+      if (checkedEdits.length === 0) throw new Error("Aucun nouveau code coché avec un stade");
 
       // Determine date_reference_cycle
       const dateRefCycle = isNewCycle ? today : (lastObservation?.date_reference_cycle || today);
 
-      // Create observation header
-      const { data: obs, error: obsErr } = await supabase
-        .from("observations_phenologie")
-        .insert({
-          domaine_id: Number(selectedDomaine),
-          campagne_id: Number(selectedCampagne),
-          date_observation: today,
-          user_id: session.user.id,
-          observateur_nom: userInfo.nomComplet || "Inconnu",
-          date_reference_cycle: dateRefCycle,
-        })
-        .select()
-        .single();
-      if (obsErr) throw obsErr;
+      let observationId: number;
+
+      // If continuing the same cycle and last observation exists, add to it
+      if (!isNewCycle && lastObservation?.id) {
+        observationId = lastObservation.id;
+      } else {
+        // Create new observation header
+        const { data: obs, error: obsErr } = await supabase
+          .from("observations_phenologie")
+          .insert({
+            domaine_id: Number(selectedDomaine),
+            campagne_id: Number(selectedCampagne),
+            date_observation: today,
+            user_id: session.user.id,
+            observateur_nom: userInfo.nomComplet || "Inconnu",
+            date_reference_cycle: dateRefCycle,
+          })
+          .select()
+          .single();
+        if (obsErr) throw obsErr;
+        observationId = obs.id;
+      }
 
       // Insert details
       const details = checkedEdits.map(([varieteId, edit]) => ({
-        observation_id: obs.id,
+        observation_id: observationId,
         variete_id: Number(varieteId),
-        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || null,
+        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || alreadySavedMap[Number(varieteId)]?.stade || null,
         stade_phenologique: edit.stade,
         date_stade: edit.date || today,
         observations: edit.obs || null,
@@ -377,8 +388,9 @@ export default function PhenologieSuivi() {
       localStorage.removeItem(key);
       setEdits({});
       queryClient.invalidateQueries({ queryKey: ["last-observation"] });
+      queryClient.invalidateQueries({ queryKey: ["cycle-observations"] });
       queryClient.invalidateQueries({ queryKey: ["rappel-pheno"] });
-      toast.success(`Observation enregistrée (${Object.values(edits).filter(e => e.checked).length} codes)`);
+      toast.success(`Observation enregistrée (${newCheckedCodes} codes ajoutés)`);
     },
     onError: (e: any) => toast.error(e.message),
   });
