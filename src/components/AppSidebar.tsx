@@ -1,4 +1,4 @@
-import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, Map, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
+import { LayoutDashboard, PlusCircle, List, BarChart3, CheckSquare, LogOut, Settings, FlaskConical, Flower2, History, GitCompareArrows, LineChart, GitMerge, Download, FileText, TreePine, Users } from "lucide-react";
 import logoDA from "@/assets/logo-domaines-agricoles.png";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,7 +42,7 @@ export function AppSidebar() {
   const analyticsItems = [
     ...(userInfo.role === "direction" || userInfo.role === "responsable_central" ? [{ title: "Vue Exécutive", url: "/analytics/executive", icon: LineChart, permKey: "analytics_executive" }] : []),
     { title: "Dashboard Global", url: "/analytics/global", icon: BarChart3, permKey: "analytics_global" },
-    { title: "Carte GPS", url: "/analytics/carte-gps", icon: Map, permKey: "analytics_carte" },
+    
     { title: "Analyses Croisées", url: "/analytics/analyses-croisees", icon: GitMerge, permKey: "analytics_croisees" },
     { title: "Exports Avancés", url: "/analytics/exports", icon: Download, permKey: "analytics_exports" },
     { title: "Rapports Auto", url: "/analytics/rapports-auto", icon: FileText, permKey: "analytics_rapports" },
