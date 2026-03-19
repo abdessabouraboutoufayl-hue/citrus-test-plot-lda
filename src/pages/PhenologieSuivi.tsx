@@ -193,8 +193,12 @@ export default function PhenologieSuivi() {
         }
       }
     }
+    // If ALL varietes in domaine are already saved, cycle is complete → return empty for new cycle
+    if (filteredVarietes.length > 0 && filteredVarietes.every(v => map[v.id])) {
+      return {};
+    }
     return map;
-  }, [cycleObservations]);
+  }, [cycleObservations, filteredVarietes]);
 
   const getEdit = (varieteId: number): DetailEdit => {
     if (edits[varieteId]) return edits[varieteId];
@@ -297,13 +301,13 @@ export default function PhenologieSuivi() {
     const refDate = lastObservation?.date_reference_cycle || lastObsDate;
     const nextDue = new Date(refDate);
     nextDue.setDate(nextDue.getDate() + CYCLE_INTERVAL_DAYS);
-    const windowStart = new Date(nextDue);
-    windowStart.setDate(windowStart.getDate() - CYCLE_WINDOW_DAYS);
     const now = new Date();
-    // If within window of next due, it's same cycle continuation
-    // If past window, it's new cycle
-    return now > nextDue;
-  }, [lastObsDate, lastObservation]);
+    // If past next due date, it's a new cycle
+    if (now > nextDue) return true;
+    // If all codes are already saved in this cycle, treat as complete → next cycle
+    if (totalCodes > 0 && alreadySavedCount >= totalCodes) return true;
+    return false;
+  }, [lastObsDate, lastObservation, totalCodes, alreadySavedCount]);
 
   // Auto-set observation date to prochaine_observation_due when starting a new cycle
   useEffect(() => {
