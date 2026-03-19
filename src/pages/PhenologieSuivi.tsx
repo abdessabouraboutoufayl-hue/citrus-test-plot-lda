@@ -368,7 +368,7 @@ export default function PhenologieSuivi() {
           .insert({
             domaine_id: Number(selectedDomaine),
             campagne_id: Number(selectedCampagne),
-            date_observation: today,
+            date_observation: observationDate,
             user_id: session.user.id,
             observateur_nom: userInfo.nomComplet || "Inconnu",
             date_reference_cycle: dateRefCycle,
