@@ -354,7 +354,7 @@ export default function PhenologieSuivi() {
       if (checkedEdits.length === 0) throw new Error("Aucun nouveau code coché avec un stade");
 
       // Determine date_reference_cycle
-      const dateRefCycle = isNewCycle ? today : (lastObservation?.date_reference_cycle || today);
+      const dateRefCycle = isNewCycle ? observationDate : (lastObservation?.date_reference_cycle || observationDate);
 
       let observationId: number;
 
