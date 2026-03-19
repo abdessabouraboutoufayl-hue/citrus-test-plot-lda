@@ -305,6 +305,15 @@ export default function PhenologieSuivi() {
     return now > nextDue;
   }, [lastObsDate, lastObservation]);
 
+  // Auto-set observation date to prochaine_observation_due when starting a new cycle
+  useEffect(() => {
+    if (isNewCycle && rappel?.prochaine_observation_due) {
+      setObservationDate(rappel.prochaine_observation_due);
+    } else {
+      setObservationDate(today);
+    }
+  }, [isNewCycle, rappel, today]);
+
   // Auto-save to localStorage
   useEffect(() => {
     const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
