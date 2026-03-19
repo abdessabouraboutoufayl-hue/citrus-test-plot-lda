@@ -504,14 +504,15 @@ export default function PhenologieSuivi() {
                             className="h-6 px-2 text-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
-                              checkAllType(group.varietes, !allChecked);
+                              const remainingVarietes = group.varietes.filter(v => !alreadySavedMap[v.id]);
+                              const allChecked = remainingVarietes.every((v) => edits[v.id]?.checked);
+                              checkAllType(remainingVarietes, !allChecked);
                             }}
                           >
-                            {group.varietes.every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
+                            {group.varietes.filter(v => !alreadySavedMap[v.id]).every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
                           </Button>
                           <span className="text-xs text-muted-foreground">
-                            {groupChecked}/{group.varietes.length} codes
+                            {groupChecked + group.varietes.filter(v => alreadySavedMap[v.id]).length}/{group.varietes.length} codes
                           </span>
                         </div>
                       </div>
