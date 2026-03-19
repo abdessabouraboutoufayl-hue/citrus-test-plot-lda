@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2, Pencil, Shield, Users, UserCheck } from "lucide-react";
@@ -348,6 +349,21 @@ function UtilisateursGestionTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Utilisateur supprimé");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const openAssign = (user: any) => {
     setEditUserId(user.id);
     setSelectedRole(user.role || "");
@@ -404,10 +420,34 @@ function UtilisateursGestionTab() {
                     <span className="text-xs text-muted-foreground">Accès complet</span>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
                   <Button variant={u.has_role ? "ghost" : "default"} size="sm" onClick={() => openAssign(u)}>
                     <Shield className="h-4 w-4 mr-1" /> {u.has_role ? "Modifier" : "Activer"}
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. L'utilisateur <strong>{u.email}</strong> sera définitivement supprimé avec tous ses droits d'accès.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteUserMutation.mutate(u.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </TableCell>
               </TableRow>
             ))}
