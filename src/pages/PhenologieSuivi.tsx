@@ -449,7 +449,17 @@ export default function PhenologieSuivi() {
           {/* Header stats */}
           <Card>
             <CardContent className="pt-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <Label htmlFor="obs-date" className="text-xs text-muted-foreground">Date d'observation</Label>
+                  <Input
+                    id="obs-date"
+                    type="date"
+                    value={observationDate}
+                    onChange={(e) => setObservationDate(e.target.value)}
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
                 <div className="flex items-center gap-3">
                   <CalendarDays className="h-5 w-5 text-muted-foreground" />
                   <div>
