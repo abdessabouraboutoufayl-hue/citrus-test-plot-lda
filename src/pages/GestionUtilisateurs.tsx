@@ -349,6 +349,21 @@ function UtilisateursGestionTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Utilisateur supprimé");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const openAssign = (user: any) => {
     setEditUserId(user.id);
     setSelectedRole(user.role || "");
