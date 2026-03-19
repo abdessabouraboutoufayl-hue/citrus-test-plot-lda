@@ -212,7 +212,7 @@ export default function PhenologieSuivi() {
     setEdits((prev) => {
       const current = prev[varieteId] || {
         stade: lastDetailsMap[varieteId]?.stade || "",
-        date: today,
+        date: observationDate,
         obs: "",
         photo: false,
         checked: false,
