@@ -533,6 +533,23 @@ export default function PhenologieSuivi() {
                           </TableHeader>
                           <TableBody>
                             {group.varietes.map((v) => {
+                              const saved = alreadySavedMap[v.id];
+                              if (saved) {
+                                // Already saved in current cycle - show as done
+                                return (
+                                  <TableRow key={v.id} className="bg-primary/10 opacity-70">
+                                    <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{saved.stade}</TableCell>
+                                    <TableCell className="text-sm font-medium text-primary">✅ {saved.stade}</TableCell>
+                                    <TableCell className="text-xs">{saved.date ? format(new Date(saved.date), "dd/MM/yyyy", { locale: fr }) : "—"}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{saved.obs || "—"}</TableCell>
+                                    <TableCell>—</TableCell>
+                                    <TableCell>
+                                      <Checkbox checked disabled />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
                               const edit = getEdit(v.id);
                               const prevStade = lastDetailsMap[v.id]?.stade || "—";
                               return (
@@ -562,13 +579,13 @@ export default function PhenologieSuivi() {
                                               variant="ghost"
                                               size="icon"
                                               className="h-7 w-7 shrink-0"
-                                              onClick={() => duplicateStadeToType(v.id, group.varietes)}
+                                              onClick={() => duplicateStadeToType(v.id, group.varietes.filter(vv => !alreadySavedMap[vv.id]))}
                                             >
                                               <CopyCheck className="h-3.5 w-3.5 text-muted-foreground" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent side="top">
-                                            <p className="text-xs">Appliquer ce stade à tout le type</p>
+                                            <p className="text-xs">Appliquer ce stade aux codes restants</p>
                                           </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
