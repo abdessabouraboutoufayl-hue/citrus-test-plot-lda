@@ -193,8 +193,12 @@ export default function PhenologieSuivi() {
         }
       }
     }
+    // If ALL varietes in domaine are already saved, cycle is complete → return empty for new cycle
+    if (filteredVarietes.length > 0 && filteredVarietes.every(v => map[v.id])) {
+      return {};
+    }
     return map;
-  }, [cycleObservations]);
+  }, [cycleObservations, filteredVarietes]);
 
   const getEdit = (varieteId: number): DetailEdit => {
     if (edits[varieteId]) return edits[varieteId];
