@@ -420,10 +420,34 @@ function UtilisateursGestionTab() {
                     <span className="text-xs text-muted-foreground">Accès complet</span>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="flex gap-1">
                   <Button variant={u.has_role ? "ghost" : "default"} size="sm" onClick={() => openAssign(u)}>
                     <Shield className="h-4 w-4 mr-1" /> {u.has_role ? "Modifier" : "Activer"}
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. L'utilisateur <strong>{u.email}</strong> sera définitivement supprimé avec tous ses droits d'accès.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteUserMutation.mutate(u.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </TableCell>
               </TableRow>
             ))}
