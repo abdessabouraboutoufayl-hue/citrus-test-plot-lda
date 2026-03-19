@@ -633,15 +633,20 @@ export default function PhenologieSuivi() {
           )}
 
           {/* Footer save */}
-          <div className="sticky bottom-4 z-10">
+          <div className="sticky bottom-4 z-10 flex items-center gap-3 flex-wrap">
+            {alreadySavedCount > 0 && (
+              <span className="text-sm text-muted-foreground bg-card px-3 py-2 rounded-md border">
+                ✅ {alreadySavedCount} code{alreadySavedCount > 1 ? "s" : ""} déjà saisi{alreadySavedCount > 1 ? "s" : ""} · {totalCodes - alreadySavedCount} restant{totalCodes - alreadySavedCount > 1 ? "s" : ""}
+              </span>
+            )}
             <Button
               className="w-full sm:w-auto"
               size="lg"
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || checkedCodes === 0}
+              disabled={saveMutation.isPending || newCheckedCodes === 0}
             >
               <Save className="h-5 w-5 mr-2" />
-              💾 Enregistrer observation ({checkedCodes} code{checkedCodes > 1 ? "s" : ""})
+              💾 Enregistrer ({newCheckedCodes} nouveau{newCheckedCodes > 1 ? "x" : ""} code{newCheckedCodes > 1 ? "s" : ""})
             </Button>
           </div>
         </>
