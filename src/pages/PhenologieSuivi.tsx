@@ -171,6 +171,30 @@ export default function PhenologieSuivi() {
     return map;
   }, [lastObservation]);
 
+  // Already-saved variete IDs in the current cycle (from the most recent observation)
+  const alreadySavedMap = useMemo(() => {
+    const map: Record<number, { stade: string; date: string; obs: string }> = {};
+    if (!cycleObservations || cycleObservations.length === 0) return map;
+    // The latest observation is the current cycle reference
+    const latestObs = cycleObservations[0];
+    if (!latestObs) return map;
+    const refDate = latestObs.date_reference_cycle || latestObs.date_observation;
+    // Collect all details from observations sharing the same cycle reference
+    for (const obs of cycleObservations) {
+      const obsRef = obs.date_reference_cycle || obs.date_observation;
+      if (obsRef === refDate) {
+        for (const d of (obs.phenologie_details || []) as any[]) {
+          map[d.variete_id] = {
+            stade: d.stade_phenologique,
+            date: d.date_stade || obs.date_observation,
+            obs: d.observations || "",
+          };
+        }
+      }
+    }
+    return map;
+  }, [cycleObservations]);
+
   const getEdit = (varieteId: number): DetailEdit => {
     if (edits[varieteId]) return edits[varieteId];
     const prev = lastDetailsMap[varieteId];
