@@ -49,6 +49,7 @@ export default function PhenologieSuivi() {
   const queryClient = useQueryClient();
   const isCentral = userInfo.role === "responsable_central";
   const today = new Date().toISOString().split("T")[0];
+  const [observationDate, setObservationDate] = useState(today);
 
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
