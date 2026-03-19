@@ -67,10 +67,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Delete user_roles first
+    // Delete all related data to avoid FK constraint violations
+    await supabaseAdmin.from("notifications").delete().eq("user_id", user_id);
+    await supabaseAdmin.from("exports_historique").delete().eq("user_id", user_id);
+    await supabaseAdmin.from("rapports_automatiques").delete().eq("user_destinataire", user_id);
+    
+    // Delete phenologie-related data
+    const { data: obsIds } = await supabaseAdmin
+      .from("observations_phenologie")
+      .select("id")
+      .eq("user_id", user_id);
+    if (obsIds && obsIds.length > 0) {
+      const ids = obsIds.map(o => o.id);
+      await supabaseAdmin.from("phenologie_details").delete().in("observation_id", ids);
+      await supabaseAdmin.from("observations_phenologie").delete().eq("user_id", user_id);
+    }
+
+    // Delete phenologie observations linked via phenologie table
+    const { data: phenoIds } = await supabaseAdmin
+      .from("phenologie")
+      .select("id")
+      .eq("user_id", user_id);
+    if (phenoIds && phenoIds.length > 0) {
+      const ids = phenoIds.map(p => p.id);
+      await supabaseAdmin.from("phenologie_observations").delete().in("phenologie_id", ids);
+    }
+    await supabaseAdmin.from("phenologie").delete().eq("user_id", user_id);
+
+    await supabaseAdmin.from("qualite_interne").delete().eq("user_id", user_id);
+    await supabaseAdmin.from("production").delete().eq("user_id", user_id);
     await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
-    // Delete profile
     await supabaseAdmin.from("profiles").delete().eq("id", user_id);
+    
     // Delete auth user
     const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
     if (error) throw error;
