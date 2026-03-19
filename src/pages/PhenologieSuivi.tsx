@@ -49,6 +49,7 @@ export default function PhenologieSuivi() {
   const queryClient = useQueryClient();
   const isCentral = userInfo.role === "responsable_central";
   const today = new Date().toISOString().split("T")[0];
+  const [observationDate, setObservationDate] = useState(today);
 
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
@@ -200,7 +201,7 @@ export default function PhenologieSuivi() {
     const prev = lastDetailsMap[varieteId];
     return {
       stade: prev?.stade || "",
-      date: today,
+      date: observationDate,
       obs: "",
       photo: false,
       checked: false,
@@ -211,20 +212,20 @@ export default function PhenologieSuivi() {
     setEdits((prev) => {
       const current = prev[varieteId] || {
         stade: lastDetailsMap[varieteId]?.stade || "",
-        date: today,
+        date: observationDate,
         obs: "",
         photo: false,
         checked: false,
       };
       return { ...prev, [varieteId]: { ...current, [field]: value } };
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
     setEdits((prev) => {
       const sourceEdit = prev[sourceVarieteId] || {
         stade: lastDetailsMap[sourceVarieteId]?.stade || "",
-        date: today,
+        date: observationDate,
         obs: "",
         photo: false,
         checked: false,
@@ -237,17 +238,17 @@ export default function PhenologieSuivi() {
       for (const v of typeVarietes) {
         const current = updated[v.id] || {
           stade: lastDetailsMap[v.id]?.stade || "",
-          date: today,
+          date: observationDate,
           obs: "",
           photo: false,
           checked: false,
         };
-        updated[v.id] = { ...current, stade: sourceEdit.stade, date: today, checked: true };
+        updated[v.id] = { ...current, stade: sourceEdit.stade, date: observationDate, checked: true };
       }
       toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
       return updated;
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   const checkAllType = useCallback((typeVarietes: typeof filteredVarietes, check: boolean) => {
     setEdits((prev) => {
@@ -255,7 +256,7 @@ export default function PhenologieSuivi() {
       for (const v of typeVarietes) {
         const current = updated[v.id] || {
           stade: lastDetailsMap[v.id]?.stade || "",
-          date: today,
+          date: observationDate,
           obs: "",
           photo: false,
           checked: false,
@@ -264,7 +265,7 @@ export default function PhenologieSuivi() {
       }
       return updated;
     });
-  }, [lastDetailsMap, today]);
+  }, [lastDetailsMap, observationDate]);
 
   // Progress stats (include already saved codes)
   const alreadySavedCount = useMemo(() => {
@@ -303,6 +304,15 @@ export default function PhenologieSuivi() {
     // If past window, it's new cycle
     return now > nextDue;
   }, [lastObsDate, lastObservation]);
+
+  // Auto-set observation date to prochaine_observation_due when starting a new cycle
+  useEffect(() => {
+    if (isNewCycle && rappel?.prochaine_observation_due) {
+      setObservationDate(rappel.prochaine_observation_due);
+    } else {
+      setObservationDate(today);
+    }
+  }, [isNewCycle, rappel, today]);
 
   // Auto-save to localStorage
   useEffect(() => {
@@ -344,7 +354,7 @@ export default function PhenologieSuivi() {
       if (checkedEdits.length === 0) throw new Error("Aucun nouveau code coché avec un stade");
 
       // Determine date_reference_cycle
-      const dateRefCycle = isNewCycle ? today : (lastObservation?.date_reference_cycle || today);
+      const dateRefCycle = isNewCycle ? observationDate : (lastObservation?.date_reference_cycle || observationDate);
 
       let observationId: number;
 
@@ -358,7 +368,7 @@ export default function PhenologieSuivi() {
           .insert({
             domaine_id: Number(selectedDomaine),
             campagne_id: Number(selectedCampagne),
-            date_observation: today,
+            date_observation: observationDate,
             user_id: session.user.id,
             observateur_nom: userInfo.nomComplet || "Inconnu",
             date_reference_cycle: dateRefCycle,
@@ -439,7 +449,17 @@ export default function PhenologieSuivi() {
           {/* Header stats */}
           <Card>
             <CardContent className="pt-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <Label htmlFor="obs-date" className="text-xs text-muted-foreground">Date d'observation</Label>
+                  <Input
+                    id="obs-date"
+                    type="date"
+                    value={observationDate}
+                    onChange={(e) => setObservationDate(e.target.value)}
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
                 <div className="flex items-center gap-3">
                   <CalendarDays className="h-5 w-5 text-muted-foreground" />
                   <div>
