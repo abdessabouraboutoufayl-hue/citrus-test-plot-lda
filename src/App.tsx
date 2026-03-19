@@ -71,7 +71,7 @@ function AppRoutes() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/analytics/executive" element={<AnalyticsExecutive />} />
         <Route path="/analytics/global" element={<AnalyticsGlobal />} />
-        <Route path="/analytics/carte-gps" element={<AnalyticsCarteGPS />} />
+        
         <Route path="/analytics/analyses-croisees" element={<AnalysesCroisees />} />
         <Route path="/analytics/exports" element={<AnalyticsExports />} />
         <Route path="/analytics/rapports-auto" element={<AnalyticsRapportsAuto />} />

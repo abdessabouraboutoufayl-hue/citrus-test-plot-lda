@@ -59,7 +59,7 @@ export const APP_MODULES: Module[] = [
     subMenus: [
       { key: "analytics_executive", label: "Vue Exécutive", path: "/analytics/executive" },
       { key: "analytics_global", label: "Dashboard Global", path: "/analytics/global" },
-      { key: "analytics_carte", label: "Carte GPS", path: "/analytics/carte-gps" },
+      
       { key: "analytics_croisees", label: "Analyses Croisées", path: "/analytics/analyses-croisees" },
       { key: "analytics_exports", label: "Exports Avancés", path: "/analytics/exports" },
       { key: "analytics_rapports", label: "Rapports Auto", path: "/analytics/rapports-auto" },
