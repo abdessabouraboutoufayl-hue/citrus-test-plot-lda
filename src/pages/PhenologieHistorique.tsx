@@ -120,12 +120,18 @@ export default function PhenologieHistorique() {
             </div>
             <div>
               <Label className="text-xs mb-1 block">Ferme</Label>
-              <SearchableSelect
-                options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))]}
-                value={selectedDomaine}
-                onValueChange={setSelectedDomaine}
-                placeholder="Toutes"
-              />
+              {isCentral ? (
+                <SearchableSelect
+                  options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))]}
+                  value={selectedDomaine}
+                  onValueChange={setSelectedDomaine}
+                  placeholder="Toutes"
+                />
+              ) : (
+                <div className="h-10 flex items-center px-3 rounded-md border bg-muted text-sm">
+                  {domaines?.find(d => d.id.toString() === selectedDomaine)?.nom || "—"}
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
