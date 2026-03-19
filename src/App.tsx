@@ -21,7 +21,7 @@ import PhenologieComparaison from "@/pages/PhenologieComparaison";
 import PhenologieDashboard from "@/pages/PhenologieDashboard";
 import AnalyticsExecutive from "@/pages/AnalyticsExecutive";
 import AnalyticsGlobal from "@/pages/AnalyticsGlobal";
-import AnalyticsCarteGPS from "@/pages/AnalyticsCarteGPS";
+
 import AnalysesCroisees from "@/pages/AnalysesCroisees";
 import AnalyticsExports from "@/pages/AnalyticsExports";
 import AnalyticsRapportsAuto from "@/pages/AnalyticsRapportsAuto";
