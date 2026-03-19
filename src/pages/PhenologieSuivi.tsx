@@ -266,19 +266,23 @@ export default function PhenologieSuivi() {
     });
   }, [lastDetailsMap, today]);
 
-  // Progress stats
+  // Progress stats (include already saved codes)
+  const alreadySavedCount = useMemo(() => {
+    return filteredVarietes.filter(v => alreadySavedMap[v.id]).length;
+  }, [filteredVarietes, alreadySavedMap]);
   const totalCodes = filteredVarietes.length;
-  const checkedCodes = Object.values(edits).filter((e) => e.checked).length;
+  const newCheckedCodes = Object.entries(edits).filter(([vid, e]) => e.checked && !alreadySavedMap[Number(vid)]).length;
+  const checkedCodes = alreadySavedCount + newCheckedCodes;
   const progressPct = totalCodes > 0 ? Math.round((checkedCodes / totalCodes) * 100) : 0;
 
   const typesCompleted = useMemo(() => {
     let done = 0;
     for (const [, group] of typeGroups) {
-      const allChecked = group.varietes.every((v) => edits[v.id]?.checked);
-      if (allChecked && group.varietes.length > 0) done++;
+      const allDone = group.varietes.every((v) => alreadySavedMap[v.id] || edits[v.id]?.checked);
+      if (allDone && group.varietes.length > 0) done++;
     }
     return done;
-  }, [typeGroups, edits]);
+  }, [typeGroups, edits, alreadySavedMap]);
 
   // Rappel display
   const lastObsDate = rappel?.derniere_observation || lastObservation?.date_observation;
