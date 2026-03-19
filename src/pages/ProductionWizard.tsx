@@ -533,7 +533,7 @@ export default function ProductionWizard() {
               </Button>
               <Button
                 type="button"
-                onClick={() => onSubmit(isEdit ? "Soumis" : "Brouillon")}
+                onClick={() => onSubmit("Soumis")}
                 disabled={submitMutation.isPending || (calibreType !== null && calibreTotal > 0 && !calibreValid)}
                 className="bg-primary hover:bg-primary/90"
               >
