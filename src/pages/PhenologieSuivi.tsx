@@ -201,7 +201,7 @@ export default function PhenologieSuivi() {
     const prev = lastDetailsMap[varieteId];
     return {
       stade: prev?.stade || "",
-      date: today,
+      date: observationDate,
       obs: "",
       photo: false,
       checked: false,
