@@ -18,8 +18,12 @@ import { Download, Eye } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
 export default function PhenologieHistorique() {
+  const { userInfo } = useAuth();
+  const isCentral = userInfo.role === "responsable_central" || userInfo.role === "direction";
   const [selectedCampagne, setSelectedCampagne] = useState("");
-  const [selectedDomaine, setSelectedDomaine] = useState("");
+  const [selectedDomaine, setSelectedDomaine] = useState(
+    !isCentral && userInfo.domaineId ? userInfo.domaineId.toString() : ""
+  );
   const [expandedObs, setExpandedObs] = useState<string[]>([]);
 
   const { data: campagnes } = useQuery({
