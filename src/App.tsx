@@ -29,6 +29,7 @@ import ProductionSaisieVariete from "@/pages/ProductionSaisieVariete";
 import ResetPassword from "@/pages/ResetPassword";
 import GestionUtilisateurs from "@/pages/GestionUtilisateurs";
 import NoAccess from "@/pages/NoAccess";
+import GuestAccess from "@/pages/GuestAccess";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/guest" element={<GuestAccess />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
