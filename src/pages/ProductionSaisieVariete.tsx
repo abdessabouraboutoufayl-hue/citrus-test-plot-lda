@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, productionApi } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, type CalibreType } from "@/lib/calibre-config";
@@ -53,7 +53,7 @@ const emptyRow = (id: number, pos: number): RowData => ({
 
 export default function ProductionSaisieVariete() {
   const navigate = useNavigate();
-  const { user, userInfo } = useAuth();
+  const { userInfo } = useAuth();
   const queryClient = useQueryClient();
 
   const [mode, setMode] = useState<"manual" | "import">("manual");
@@ -73,38 +73,26 @@ export default function ProductionSaisieVariete() {
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("campagnes").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.campagnes(),
   });
 
   const { data: varietes = [] } = useQuery({
     queryKey: ["varietes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("varietes").select("*, types_varietes(type_nom, type_code, couleur_badge)");
-      return data || [];
-    },
+    queryFn: () => refApi.varietes(),
   });
 
   const { data: porteGreffes = [] } = useQuery({
     queryKey: ["porte_greffes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("porte_greffes").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.porteGreffes(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["domaines"],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaines").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.domaines(),
   });
 
-  const currentDomaine = domaines.find(d => d.id === effectiveDomaineId);
-  const currentPG = porteGreffes.find(p => p.id === selectedPG);
+  const currentDomaine = domaines.find((d: any) => d.id === effectiveDomaineId);
+  const currentPG = porteGreffes.find((p: any) => p.id === selectedPG);
 
   const updateRow = useCallback((id: number, field: keyof RowData, value: any) => {
     setRows(prev => prev.map(r => {
@@ -198,8 +186,8 @@ export default function ProductionSaisieVariete() {
     };
   }, [rows]);
 
-  const selectedVariete = varietes.find(v => v.id === varieteId);
-  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const selectedVariete = varietes.find((v: any) => v.id === varieteId);
+  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.codeVariete) : null;
   const calibreEntries = getCalibreEntries(calibreType);
   const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
   const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON : true;
@@ -243,49 +231,47 @@ export default function ProductionSaisieVariete() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !effectiveDomaineId || !campagneId || !varieteId || !selectedPG) throw new Error("Données incomplètes");
+      if (!effectiveDomaineId || !campagneId || !varieteId || !selectedPG) throw new Error("Données incomplètes");
 
-      // Upload photos first
-      const photoUrls: Record<number, string> = {};
+      const toCamel = (s: string) => s.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+
+      const calibreData = (!skipCalibre && calibreType)
+        ? Object.fromEntries([
+            ["nbFruitsEchantillon", NB_ECHANTILLON],
+            ...Object.entries(calibreValues).map(([k, v]) => [toCamel(k), v]),
+          ])
+        : {};
+
       for (const r of rows) {
+        const basePayload: Record<string, any> = {
+          domaineId: effectiveDomaineId,
+          campagneId,
+          varieteId,
+          porteGreffeId: selectedPG,
+          ligneNumero: r.ligne,
+          positionLigne: r.position,
+          dateRecolte,
+          poidsTotalKg: r.statut === "Normal" ? (r.poids || 0) : 0,
+          nbFruitsTotal: r.statut === "Normal" ? (r.fruits || 0) : 0,
+          calibreMoyenMm: r.statut === "Normal" ? (r.calibre || null) : null,
+          qualiteGlobale: r.statut === "Normal" ? (r.qualite || null) : null,
+          statutValidation: "Brouillon",
+          arbreStatut: r.statut,
+          arbreInclusCalculs: r.statut === "Normal",
+          ...(r.statut === "Normal" ? calibreData : {}),
+        };
+
         if (r.photo) {
-          const ext = r.photo.name?.split(".").pop() || "jpg";
-          const path = `${user.id}/${Date.now()}_${r.id}.${ext}`;
-          const { error: uploadErr } = await supabase.storage.from("production-photos").upload(path, r.photo);
-          if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from("production-photos").getPublicUrl(path);
-            photoUrls[r.id] = urlData.publicUrl;
-          }
+          const fd = new FormData();
+          Object.entries(basePayload).forEach(([k, v]) => {
+            if (v !== null && v !== undefined) fd.append(k, String(v));
+          });
+          fd.append("photo", r.photo);
+          await productionApi.create(fd);
+        } else {
+          await productionApi.createJson(basePayload);
         }
       }
-
-      const calibreData = (!skipCalibre && calibreType) ? {
-        nb_fruits_echantillon: NB_ECHANTILLON,
-        ...calibreValues,
-      } : {};
-
-      const allInserts = rows.map(r => ({
-        domaine_id: effectiveDomaineId,
-        campagne_id: campagneId,
-        variete_id: varieteId,
-        porte_greffe_id: selectedPG,
-        ligne_numero: r.ligne,
-        position_ligne: r.position,
-        date_recolte: dateRecolte,
-        poids_total_kg: r.statut === "Normal" ? (r.poids || 0) : 0,
-        nb_fruits_total: r.statut === "Normal" ? (r.fruits || 0) : 0,
-        calibre_moyen_mm: r.statut === "Normal" ? (r.calibre || null) : null,
-        qualite_globale: r.statut === "Normal" ? (r.qualite || null) : null,
-        statut_validation: "Brouillon",
-        user_id: user.id,
-        arbre_statut: r.statut,
-        arbre_inclus_calculs: r.statut === "Normal",
-        photo_url: photoUrls[r.id] || null,
-        ...(r.statut === "Normal" ? calibreData : {}),
-      } as any));
-      if (allInserts.length === 0) throw new Error("Aucune donnée");
-      const { error } = await supabase.from("production").insert(allInserts);
-      if (error) throw error;
     },
     onSuccess: () => {
       const excluded = rows.filter(r => r.statut !== "Normal").length;
@@ -380,7 +366,7 @@ export default function ProductionSaisieVariete() {
                   <div className="space-y-1.5">
                     <Label>Domaine</Label>
                     <SearchableSelect
-                      options={domaines.map(d => ({ value: d.id.toString(), label: `${d.nom} (${d.code})` }))}
+                      options={domaines.map((d: any) => ({ value: d.id.toString(), label: `${d.nom} (${d.code || ""})` }))}
                       value={domaineId?.toString()}
                       onValueChange={v => setDomaineId(Number(v))}
                       placeholder="Sélectionner domaine"
@@ -396,7 +382,7 @@ export default function ProductionSaisieVariete() {
                 <div className="space-y-1.5">
                   <Label>Campagne</Label>
                   <SearchableSelect
-                    options={campagnes.map(c => ({ value: c.id.toString(), label: c.code_campagne }))}
+                    options={campagnes.map((c: any) => ({ value: c.id.toString(), label: c.codeCampagne }))}
                     value={campagneId?.toString()}
                     onValueChange={v => setCampagneId(Number(v))}
                     placeholder="Sélectionner campagne"
@@ -406,11 +392,11 @@ export default function ProductionSaisieVariete() {
                 <div className="space-y-1.5">
                   <Label>Variété</Label>
                   <SearchableSelect
-                    options={varietes.map(v => ({
+                    options={varietes.map((v: any) => ({
                       value: v.id.toString(),
-                      label: `${v.code_variete} - ${v.nom_commercial || ""}`,
-                      badge: (v.types_varietes as any)?.type_code
-                        ? { text: (v.types_varietes as any).type_code, color: (v.types_varietes as any)?.couleur_badge || "#999" }
+                      label: `${v.codeVariete} - ${v.nomCommercial || ""}`,
+                      badge: v.typeVariete?.typeCode
+                        ? { text: v.typeVariete.typeCode, color: v.typeVariete?.couleurBadge || "#999" }
                         : undefined,
                     }))}
                     value={varieteId?.toString()}
@@ -424,8 +410,8 @@ export default function ProductionSaisieVariete() {
                   <Select value={selectedPG?.toString() || ""} onValueChange={v => setSelectedPG(Number(v))}>
                     <SelectTrigger><SelectValue placeholder="Sélectionner un PG" /></SelectTrigger>
                     <SelectContent>
-                      {porteGreffes.map(pg => (
-                        <SelectItem key={pg.id} value={pg.id.toString()}>{pg.code_pg} - {pg.nom_pg}</SelectItem>
+                      {porteGreffes.map((pg: any) => (
+                        <SelectItem key={pg.id} value={pg.id.toString()}>{pg.codePg} - {pg.nomPg}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -441,10 +427,10 @@ export default function ProductionSaisieVariete() {
               </div>
               {selectedVariete && selectedPG && (
                 <div className="mt-4 flex gap-2 flex-wrap">
-                  <Badge variant="secondary">{selectedVariete.code_variete}</Badge>
-                  {selectedVariete.nom_commercial && <Badge variant="outline">{selectedVariete.nom_commercial}</Badge>}
-                  <Badge variant="outline">PG: {currentPG?.code_pg}</Badge>
-                  {currentDomaine && <Badge variant="outline">{currentDomaine.nom}</Badge>}
+                  <Badge variant="secondary">{(selectedVariete as any).codeVariete}</Badge>
+                  {(selectedVariete as any).nomCommercial && <Badge variant="outline">{(selectedVariete as any).nomCommercial}</Badge>}
+                  <Badge variant="outline">PG: {(currentPG as any)?.codePg}</Badge>
+                  {currentDomaine && <Badge variant="outline">{(currentDomaine as any).nom}</Badge>}
                 </div>
               )}
             </CardContent>
@@ -573,8 +559,8 @@ export default function ProductionSaisieVariete() {
               type={calibreType}
               values={calibreValues}
               onChange={handleCalibreChange}
-              codeVariete={selectedVariete?.code_variete}
-              codePG={currentPG?.code_pg}
+              codeVariete={(selectedVariete as any)?.codeVariete}
+              codePG={(currentPG as any)?.codePg}
             />
           )}
 

@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { productionApi } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sprout, Package, Cherry, Star } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
@@ -20,30 +20,28 @@ export default function Dashboard() {
   const { data: productions = [] } = useQuery({
     queryKey: ["dashboard-productions", userInfo.domaineId],
     queryFn: async () => {
-      let query = supabase.from("production").select("*, varietes(code_variete, nom_commercial, type_id), porte_greffes(code_pg), domaines(nom)");
-      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
-        query = query.eq("domaine_id", userInfo.domaineId);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      const result = await productionApi.list({
+        domaineId: userInfo.domaineId ?? undefined,
+        limit: 1000,
+      });
+      return result.data || [];
     },
   });
 
   const totalArbres = productions.length;
-  const totalPoids = productions.reduce((s, p) => s + (p.poids_total_kg || 0), 0);
+  const totalPoids = productions.reduce((s: number, p: any) => s + (Number(p.poidsTotalKg) || 0), 0);
   const avgPoidsFruit = productions.length
-    ? productions.reduce((s, p) => s + (p.poids_moyen_fruit_g || 0), 0) / productions.length
+    ? productions.reduce((s: number, p: any) => s + (Number(p.poidsMoyenFruitG) || 0), 0) / productions.length
     : 0;
   const qualiteAB = productions.length
-    ? (productions.filter((p) => p.qualite_globale === "A" || p.qualite_globale === "B").length / productions.length) * 100
+    ? (productions.filter((p: any) => p.qualiteGlobale === "A" || p.qualiteGlobale === "B").length / productions.length) * 100
     : 0;
 
   // Bar chart: production by variété
   const byVariete: Record<string, number> = {};
-  productions.forEach((p) => {
-    const code = (p.varietes as any)?.code_variete || "?";
-    byVariete[code] = (byVariete[code] || 0) + p.poids_total_kg;
+  productions.forEach((p: any) => {
+    const code = p.variete?.codeVariete || "?";
+    byVariete[code] = (byVariete[code] || 0) + Number(p.poidsTotalKg);
   });
   const barData = Object.entries(byVariete)
     .sort((a, b) => b[1] - a[1])
@@ -52,8 +50,8 @@ export default function Dashboard() {
 
   // Pie chart: porte-greffes
   const byPG: Record<string, number> = {};
-  productions.forEach((p) => {
-    const pg = (p.porte_greffes as any)?.code_pg || "?";
+  productions.forEach((p: any) => {
+    const pg = p.porteGreffe?.codePg || "?";
     byPG[pg] = (byPG[pg] || 0) + 1;
   });
   const pieData = Object.entries(byPG).map(([name, value]) => ({ name, value }));
@@ -62,8 +60,8 @@ export default function Dashboard() {
   const calibreChartData = (() => {
     const byVar: Record<string, { count: number; calibres: Record<string, number> }> = {};
     productions.forEach((p: any) => {
-      const code = p.varietes?.code_variete;
-      if (!code || !p.nb_fruits_echantillon) return;
+      const code = p.variete?.codeVariete;
+      if (!code || !p.nbFruitsEchantillon) return;
       const calType = getCalibreType(code);
       if (!calType) return;
       const entries = getCalibreEntries(calType);
@@ -160,10 +158,9 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Calibre Distribution */}
       {calibreChartData.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">📏 Distribution Calibres par Variété (% moyen)</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Distribution Calibres par Variété (% moyen)</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={calibreChartData} margin={{ left: 20, bottom: 20 }}>

@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, phenologieApi } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,23 @@ import {
 } from "@/components/ui/accordion";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Download, Eye } from "lucide-react";
+import { Download } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
+
+const STADES = [
+  { label: "Repos végétatif", field: "stadeReposDateDebut" },
+  { label: "Débourrement", field: "stadeDebourrementDateDebut" },
+  { label: "Boutons floraux", field: "stadeBoutonsFlorauxDateDebut" },
+  { label: "Pré-floraison", field: "stadePrefloraisonDateDebut" },
+  { label: "Floraison", field: "stadeFloraisonDateDebut" },
+  { label: "Chute pétales", field: "stadeChutePetalesDateDebut" },
+  { label: "Nouaison", field: "stadeNouaisonDateDebut" },
+  { label: "Chute physio.", field: "stadeChutePhysioDateDebut" },
+  { label: "Grossissement", field: "stadeGrossissementDateDebut" },
+  { label: "Véraison", field: "stadeVeraisonDateDebut" },
+  { label: "Début maturité", field: "stadeDebutMaturiteDate" },
+  { label: "Maturité récolte", field: "stadeMaturiteRecolteDate" },
+];
 
 export default function PhenologieHistorique() {
   const { userInfo } = useAuth();
@@ -24,38 +39,25 @@ export default function PhenologieHistorique() {
   const [selectedDomaine, setSelectedDomaine] = useState(
     !isCentral && userInfo.domaineId ? userInfo.domaineId.toString() : ""
   );
-  const [expandedObs, setExpandedObs] = useState<string[]>([]);
 
-  const { data: campagnes } = useQuery({
+  const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("campagnes").select("*").order("date_debut", { ascending: false });
-      return data || [];
-    },
+    queryFn: () => refApi.campagnes(),
   });
 
-  const { data: domaines } = useQuery({
+  const { data: domaines = [] } = useQuery({
     queryKey: ["domaines"],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaines").select("*").order("nom");
-      return data || [];
-    },
+    queryFn: () => refApi.domaines(),
   });
 
-  const { data: observations } = useQuery({
-    queryKey: ["obs-phenologie-historique", selectedCampagne, selectedDomaine],
-    queryFn: async () => {
-      let query = supabase
-        .from("observations_phenologie")
-        .select("*, phenologie_details(*, varietes(code_variete, types_varietes(type_code, type_nom, couleur_badge))), domaines(nom), campagnes(code_campagne)")
-        .order("date_observation", { ascending: false });
+  const { data: phenoList = [] } = useQuery({
+    queryKey: ["phenologie-historique", selectedCampagne],
+    queryFn: () => phenologieApi.list(selectedCampagne || undefined),
+  });
 
-      if (selectedCampagne) query = query.eq("campagne_id", Number(selectedCampagne));
-      if (selectedDomaine) query = query.eq("domaine_id", Number(selectedDomaine));
-
-      const { data } = await query;
-      return data || [];
-    },
+  const filtered = phenoList.filter((p: any) => {
+    if (selectedDomaine && String(p.domaineId) !== selectedDomaine) return false;
+    return true;
   });
 
   const fmtDate = (d: string | null) => {
@@ -64,31 +66,27 @@ export default function PhenologieHistorique() {
   };
 
   const handleExportExcel = () => {
-    if (!observations || observations.length === 0) return;
+    if (!filtered || filtered.length === 0) return;
     const rows: any[] = [];
-    for (const obs of observations) {
-      for (const det of (obs.phenologie_details || []) as any[]) {
-        rows.push({
-          Campagne: (obs as any).campagnes?.code_campagne || "—",
-          Ferme: (obs as any).domaines?.nom || "—",
-          "Date observation": fmtDate(obs.date_observation),
-          Observateur: obs.observateur_nom,
-          "Code variété": det.varietes?.code_variete || "—",
-          Type: det.varietes?.types_varietes?.type_code || "—",
-          "Stade précédent": det.stade_precedent || "—",
-          "Stade actuel": det.stade_phenologique,
-          "Date stade": fmtDate(det.date_stade),
-          Observations: det.observations || "",
-        });
+    for (const p of filtered) {
+      for (const stade of STADES) {
+        const dateVal = p[stade.field];
+        if (dateVal) {
+          rows.push({
+            Campagne: campagnes.find((c: any) => c.id === p.campagneId)?.codeCampagne || "—",
+            Domaine: domaines.find((d: any) => d.id === p.domaineId)?.nom || "—",
+            "Code variété": p.variete?.codeVariete || "—",
+            Stade: stade.label,
+            "Date début": fmtDate(dateVal),
+          });
+        }
       }
     }
     const ws = XLSX.utils.json_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws[addr]) {
-        ws[addr].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2E7D32" } } };
-      }
+      if (ws[addr]) ws[addr].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2E7D32" } } };
     }
     ws["!cols"] = Object.keys(rows[0] || {}).map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
@@ -100,19 +98,18 @@ export default function PhenologieHistorique() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-foreground">📋 Historique Phénologique</h1>
-        <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={!observations || observations.length === 0}>
+        <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={filtered.length === 0}>
           <Download className="h-4 w-4 mr-2" /> Exporter Excel
         </Button>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
             <div>
               <Label className="text-xs mb-1 block">Campagne</Label>
               <SearchableSelect
-                options={[{ value: "", label: "Toutes" }, ...(campagnes || []).map((c) => ({ value: c.id.toString(), label: c.code_campagne }))]}
+                options={[{ value: "", label: "Toutes" }, ...(campagnes || []).map((c: any) => ({ value: c.id.toString(), label: c.codeCampagne }))]}
                 value={selectedCampagne}
                 onValueChange={setSelectedCampagne}
                 placeholder="Toutes"
@@ -122,14 +119,14 @@ export default function PhenologieHistorique() {
               <Label className="text-xs mb-1 block">Ferme</Label>
               {isCentral ? (
                 <SearchableSelect
-                  options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))]}
+                  options={[{ value: "", label: "Toutes" }, ...(domaines || []).map((d: any) => ({ value: d.id.toString(), label: d.nom }))]}
                   value={selectedDomaine}
                   onValueChange={setSelectedDomaine}
                   placeholder="Toutes"
                 />
               ) : (
                 <div className="h-10 flex items-center px-3 rounded-md border bg-muted text-sm">
-                  {domaines?.find(d => d.id.toString() === selectedDomaine)?.nom || "—"}
+                  {domaines.find((d: any) => d.id.toString() === selectedDomaine)?.nom || "—"}
                 </div>
               )}
             </div>
@@ -137,28 +134,27 @@ export default function PhenologieHistorique() {
         </CardContent>
       </Card>
 
-      {/* Observations list */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{observations?.length || 0} observation(s)</CardTitle>
+          <CardTitle className="text-base">{filtered.length} enregistrement(s)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {!observations || observations.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">Aucune observation trouvée</p>
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">Aucun enregistrement trouvé</p>
           ) : (
-            <Accordion type="multiple" value={expandedObs} onValueChange={setExpandedObs}>
-              {observations.map((obs: any) => {
-                const details = (obs.phenologie_details || []) as any[];
+            <Accordion type="multiple">
+              {filtered.map((p: any) => {
+                const stadesDone = STADES.filter(s => p[s.field]).length;
+                const campagneCode = campagnes.find((c: any) => c.id === p.campagneId)?.codeCampagne || "—";
+                const domaineNom = domaines.find((d: any) => d.id === p.domaineId)?.nom || "—";
                 return (
-                  <AccordionItem key={obs.id} value={obs.id.toString()} className="border-b last:border-0">
+                  <AccordionItem key={p.id} value={String(p.id)} className="border-b last:border-0">
                     <AccordionTrigger className="px-4 py-3 hover:no-underline">
                       <div className="flex items-center gap-4 w-full text-left">
-                        <span className="text-sm font-medium">{fmtDate(obs.date_observation)}</span>
-                        <span className="text-xs text-muted-foreground">{obs.domaines?.nom}</span>
-                        <span className="text-xs text-muted-foreground">{obs.campagnes?.code_campagne}</span>
-                        <span className="text-xs text-muted-foreground ml-auto mr-4">
-                          {obs.nb_codes_saisis || details.length} codes · {obs.observateur_nom}
-                        </span>
+                        <span className="text-sm font-medium">{p.variete?.codeVariete || "—"}</span>
+                        <span className="text-xs text-muted-foreground">{domaineNom}</span>
+                        <span className="text-xs text-muted-foreground">{campagneCode}</span>
+                        <span className="text-xs text-muted-foreground ml-auto mr-4">{stadesDone}/12 stades</span>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-0 pb-0">
@@ -166,30 +162,15 @@ export default function PhenologieHistorique() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Code</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Stade précédent</TableHead>
-                              <TableHead>Stade actuel</TableHead>
-                              <TableHead>Date stade</TableHead>
-                              <TableHead>Observations</TableHead>
+                              <TableHead>Stade</TableHead>
+                              <TableHead>Date début</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {details.map((det: any) => (
-                              <TableRow key={det.id}>
-                                <TableCell className="font-mono text-sm">{det.varietes?.code_variete || "—"}</TableCell>
-                                <TableCell>
-                                  <span
-                                    className="inline-block px-2 py-0.5 rounded text-xs text-white font-medium"
-                                    style={{ backgroundColor: det.varietes?.types_varietes?.couleur_badge || "#888" }}
-                                  >
-                                    {det.varietes?.types_varietes?.type_code || "?"}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{det.stade_precedent || "—"}</TableCell>
-                                <TableCell className="text-sm font-medium">{det.stade_phenologique}</TableCell>
-                                <TableCell className="text-sm">{fmtDate(det.date_stade)}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{det.observations || "—"}</TableCell>
+                            {STADES.map(stade => (
+                              <TableRow key={stade.field} className={!p[stade.field] ? "opacity-40" : ""}>
+                                <TableCell className="text-sm font-medium">{stade.label}</TableCell>
+                                <TableCell className="text-sm">{fmtDate(p[stade.field])}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { productionApi } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PlusCircle, Search, Download, Upload, Trash2, Send, Eye, Pencil, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { PlusCircle, Search, Download, Trash2, Send, Eye, Pencil, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -64,42 +64,30 @@ export default function ProductionList() {
 
   const canSubmit = (p: any) => {
     if (userInfo.role === "direction") return false;
-    return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
+    return p.statutValidation === "Brouillon" || p.statutValidation === "Rejeté";
   };
   const canModify = (p: any) => {
     if (userInfo.role === "direction") return false;
-    return p.statut_validation === "Brouillon" || p.statut_validation === "Rejeté";
+    return p.statutValidation === "Brouillon" || p.statutValidation === "Rejeté";
   };
   const canDelete = (p: any) => {
     if (userInfo.role === "direction") return false;
-    return p.statut_validation === "Brouillon";
+    return p.statutValidation === "Brouillon";
   };
 
   const { data: productions = [], isLoading } = useQuery({
     queryKey: ["productions", userInfo.domaineId],
     queryFn: async () => {
-      let query = supabase
-        .from("production")
-        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
-        .order("domaine_id", { ascending: true })
-        .order("variete_id", { ascending: true })
-        .order("porte_greffe_id", { ascending: true })
-        .order("ligne_numero", { ascending: true })
-        .order("position_ligne", { ascending: true });
-      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
-        query = query.eq("domaine_id", userInfo.domaineId);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      const result = await productionApi.list({
+        domaineId: userInfo.domaineId ?? undefined,
+        limit: 2000,
+      });
+      return result.data || [];
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("production").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: number) => productionApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productions"] });
       toast.success("Production supprimée");
@@ -109,10 +97,7 @@ export default function ProductionList() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("production").update({ statut_validation: "Soumis" }).eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: number) => productionApi.update(String(id), { statutValidation: "Soumis" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productions"] });
       toast.success("Production soumise pour validation");
@@ -120,42 +105,40 @@ export default function ProductionList() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Filtering
   const filtered = useMemo(() => {
     return productions.filter((p: any) => {
       if (search) {
         const s = search.toLowerCase();
-        const match = p.code_arbre?.toLowerCase().includes(s) ||
-          (p.varietes as any)?.code_variete?.toLowerCase().includes(s) ||
-          (p.varietes as any)?.nom_commercial?.toLowerCase().includes(s);
+        const match = p.codeArbre?.toLowerCase().includes(s) ||
+          p.variete?.codeVariete?.toLowerCase().includes(s) ||
+          p.variete?.nomCommercial?.toLowerCase().includes(s);
         if (!match) return false;
       }
-      if (statutFilter !== "all" && p.statut_validation !== statutFilter) return false;
-      if (campagneFilter !== "all" && p.campagne_id !== parseInt(campagneFilter)) return false;
+      if (statutFilter !== "all" && p.statutValidation !== statutFilter) return false;
+      if (campagneFilter !== "all" && p.campagneId !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
-        const m = new Date(p.date_recolte).getMonth() + 1;
+        const m = new Date(p.dateRecolte).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
   }, [productions, search, statutFilter, campagneFilter, moisFilter]);
 
-  // Sorting
   const sorted = useMemo(() => {
     const arr = [...filtered];
     const dir = sortDir === "asc" ? 1 : -1;
     arr.sort((a: any, b: any) => {
       let va: any, vb: any;
       switch (sortKey) {
-        case "arbre": va = a.code_arbre || ""; vb = b.code_arbre || ""; break;
-        case "variete": va = (a.varietes as any)?.code_variete || ""; vb = (b.varietes as any)?.code_variete || ""; break;
-        case "pg": va = (a.porte_greffes as any)?.code_pg || ""; vb = (b.porte_greffes as any)?.code_pg || ""; break;
-        case "poids": va = a.poids_total_kg ?? 0; vb = b.poids_total_kg ?? 0; break;
-        case "fruits": va = a.nb_fruits_total ?? 0; vb = b.nb_fruits_total ?? 0; break;
-        case "poids_moy": va = a.poids_moyen_fruit_g ?? 0; vb = b.poids_moyen_fruit_g ?? 0; break;
-        case "date": va = a.date_recolte || ""; vb = b.date_recolte || ""; break;
-        case "statut": va = a.statut_validation || ""; vb = b.statut_validation || ""; break;
-        default: va = a.date_recolte || ""; vb = b.date_recolte || "";
+        case "arbre": va = a.codeArbre || ""; vb = b.codeArbre || ""; break;
+        case "variete": va = a.variete?.codeVariete || ""; vb = b.variete?.codeVariete || ""; break;
+        case "pg": va = a.porteGreffe?.codePg || ""; vb = b.porteGreffe?.codePg || ""; break;
+        case "poids": va = Number(a.poidsTotalKg) ?? 0; vb = Number(b.poidsTotalKg) ?? 0; break;
+        case "fruits": va = a.nbFruitsTotal ?? 0; vb = b.nbFruitsTotal ?? 0; break;
+        case "poids_moy": va = Number(a.poidsMoyenFruitG) ?? 0; vb = Number(b.poidsMoyenFruitG) ?? 0; break;
+        case "date": va = a.dateRecolte || ""; vb = b.dateRecolte || ""; break;
+        case "statut": va = a.statutValidation || ""; vb = b.statutValidation || ""; break;
+        default: va = a.dateRecolte || ""; vb = b.dateRecolte || "";
       }
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
@@ -164,7 +147,6 @@ export default function ProductionList() {
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
   useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
@@ -185,24 +167,24 @@ export default function ProductionList() {
 
   const exportExcel = () => {
     const rows = filtered.map((p: any) => ({
-      Domaine: (p.domaines as any)?.nom,
-      "Code Domaine": (p.domaines as any)?.code,
-      Arbre: p.code_arbre,
-      Variété: (p.varietes as any)?.code_variete,
-      "Nom commercial": (p.varietes as any)?.nom_commercial,
-      PG: (p.porte_greffes as any)?.code_pg,
-      Ligne: p.ligne_numero,
-      Position: p.position_ligne,
-      "Date récolte": p.date_recolte,
-      "Poids (kg)": p.poids_total_kg,
-      Fruits: p.nb_fruits_total,
-      "Poids moy (g)": p.poids_moyen_fruit_g,
-      "Calibre (mm)": p.calibre_moyen_mm,
-      "Décl %": p.taux_declassement_pct,
-      Qualité: p.qualite_globale,
-      "Statut arbre": p.arbre_statut,
-      Statut: p.statut_validation,
-      Récoltant: p.recoltant_nom,
+      Domaine: p.domaine?.nom,
+      "Code Domaine": p.domaine?.code,
+      Arbre: p.codeArbre,
+      Variété: p.variete?.codeVariete,
+      "Nom commercial": p.variete?.nomCommercial,
+      PG: p.porteGreffe?.codePg,
+      Ligne: p.ligneNumero,
+      Position: p.positionLigne,
+      "Date récolte": p.dateRecolte,
+      "Poids (kg)": Number(p.poidsTotalKg),
+      Fruits: p.nbFruitsTotal,
+      "Poids moy (g)": Number(p.poidsMoyenFruitG),
+      "Calibre (mm)": Number(p.calibreMoyenMm),
+      "Décl %": Number(p.tauxDeclassementPct),
+      Qualité: p.qualiteGlobale,
+      "Statut arbre": p.arbreStatut,
+      Statut: p.statutValidation,
+      Récoltant: p.recoltantNom,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
@@ -218,7 +200,6 @@ export default function ProductionList() {
 
   return (
     <div className="space-y-4">
-      {/* ═══ HEADER ═══ */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Productions</h1>
         <div className="flex gap-2">
@@ -233,7 +214,6 @@ export default function ProductionList() {
         </div>
       </div>
 
-      {/* ═══ FILTERS ═══ */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -253,7 +233,7 @@ export default function ProductionList() {
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes campagnes</SelectItem>
-            {[...new Map(productions.map((p: any) => [p.campagne_id, p.campagnes?.code_campagne])).entries()]
+            {[...new Map(productions.map((p: any) => [p.campagneId, p.campagne?.codeCampagne])).entries()]
               .filter(([, label]) => label)
               .sort(([, a], [, b]) => (b as string).localeCompare(a as string))
               .map(([id, label]) => (
@@ -272,7 +252,7 @@ export default function ProductionList() {
         </Select>
       </div>
 
-      {/* ═══ DESKTOP TABLE ═══ */}
+      {/* Desktop table */}
       <div className="hidden md:block">
         <Table>
           <TableHeader>
@@ -295,17 +275,15 @@ export default function ProductionList() {
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Aucune production</TableCell></TableRow>
             ) : (
               (() => {
-                // Group paginated items by combo (variete + PG)
                 const comboRows: { comboKey: string; code: string; pg: string; domaineName: string; hasCalibre: boolean; items: any[] }[] = [];
                 let lastCombo = "";
                 for (const p of paginated) {
-                  const code = (p.varietes as any)?.code_variete || "?";
-                  const pg = (p.porte_greffes as any)?.code_pg || "?";
-                  const domCode = (p.domaines as any)?.code || "?";
-                  const domNom = (p.domaines as any)?.nom || domCode;
-                  const key = `${p.domaine_id}-${code}-${pg}`;
+                  const code = p.variete?.codeVariete || "?";
+                  const pg = p.porteGreffe?.codePg || "?";
+                  const domNom = p.domaine?.nom || p.domaine?.code || "?";
+                  const key = `${p.domaineId}-${code}-${pg}`;
                   if (key !== lastCombo) {
-                    const hasCal = p.cal_0 != null || p.cal_1xxx != null || p.cal_1xx != null || p.cal_2 != null;
+                    const hasCal = p.cal0 != null || p.cal1xxx != null || p.cal1xx != null || p.cal2 != null;
                     comboRows.push({ comboKey: key, code, pg, domaineName: domNom, hasCalibre: hasCal, items: [] });
                     lastCombo = key;
                   }
@@ -316,21 +294,21 @@ export default function ProductionList() {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableCell colSpan={9} className="py-1.5">
                         <span className="font-semibold text-sm">
-                          📊 {group.domaineName} — {group.code}-{group.pg} ({group.items.length} arbres)
+                          {group.domaineName} — {group.code}-{group.pg} ({group.items.length} arbres)
                           {group.hasCalibre && <Badge variant="secondary" className="ml-2 text-xs">Profil calibre ✓</Badge>}
                         </span>
                       </TableCell>
                     </TableRow>
                     {group.items.map((p: any) => (
                       <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.code_arbre}</TableCell>
-                        <TableCell><Badge variant="outline">{(p.varietes as any)?.code_variete}</Badge></TableCell>
-                        <TableCell>{(p.porte_greffes as any)?.code_pg}</TableCell>
-                        <TableCell className="text-right">{p.poids_total_kg}</TableCell>
-                        <TableCell className="text-right">{p.nb_fruits_total}</TableCell>
-                        <TableCell className="text-right">{p.poids_moyen_fruit_g?.toFixed(1)}</TableCell>
-                        <TableCell>{fmtDate(p.date_recolte)}</TableCell>
-                        <TableCell><Badge className={statusColors[p.statut_validation || "Brouillon"]}>{p.statut_validation}</Badge></TableCell>
+                        <TableCell className="font-medium">{p.codeArbre}</TableCell>
+                        <TableCell><Badge variant="outline">{p.variete?.codeVariete}</Badge></TableCell>
+                        <TableCell>{p.porteGreffe?.codePg}</TableCell>
+                        <TableCell className="text-right">{Number(p.poidsTotalKg)}</TableCell>
+                        <TableCell className="text-right">{p.nbFruitsTotal}</TableCell>
+                        <TableCell className="text-right">{Number(p.poidsMoyenFruitG)?.toFixed(1)}</TableCell>
+                        <TableCell>{fmtDate(p.dateRecolte)}</TableCell>
+                        <TableCell><Badge className={statusColors[p.statutValidation || "Brouillon"]}>{p.statutValidation}</Badge></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="icon" onClick={() => setViewItem(p)} title="Consulter">
@@ -363,22 +341,22 @@ export default function ProductionList() {
         </Table>
       </div>
 
-      {/* ═══ MOBILE CARDS ═══ */}
+      {/* Mobile cards */}
       <div className="md:hidden space-y-3">
         {paginated.map((p: any) => (
           <Card key={p.id} className="cursor-pointer" onClick={() => setViewItem(p)}>
             <CardContent className="pt-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="font-semibold">{p.code_arbre}</p>
-                  <p className="text-xs text-muted-foreground">{(p.varietes as any)?.nom_commercial}</p>
+                  <p className="font-semibold">{p.codeArbre}</p>
+                  <p className="text-xs text-muted-foreground">{p.variete?.nomCommercial}</p>
                 </div>
-                <Badge className={statusColors[p.statut_validation || "Brouillon"]}>{p.statut_validation}</Badge>
+                <Badge className={statusColors[p.statutValidation || "Brouillon"]}>{p.statutValidation}</Badge>
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
-                <div><span className="text-muted-foreground">Poids</span><br />{p.poids_total_kg} kg</div>
-                <div><span className="text-muted-foreground">Fruits</span><br />{p.nb_fruits_total}</div>
-                <div><span className="text-muted-foreground">Qualité</span><br />{p.qualite_globale || "-"}</div>
+                <div><span className="text-muted-foreground">Poids</span><br />{Number(p.poidsTotalKg)} kg</div>
+                <div><span className="text-muted-foreground">Fruits</span><br />{p.nbFruitsTotal}</div>
+                <div><span className="text-muted-foreground">Qualité</span><br />{p.qualiteGlobale || "-"}</div>
               </div>
               <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                 {canSubmit(p) && (
@@ -402,7 +380,7 @@ export default function ProductionList() {
         ))}
       </div>
 
-      {/* ═══ PAGINATION FOOTER ═══ */}
+      {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>{sorted.length} résultats</span>
@@ -439,7 +417,7 @@ export default function ProductionList() {
         </div>
       </div>
 
-      {/* ═══ DETAIL MODAL ═══ */}
+      {/* Detail modal */}
       <Dialog open={!!viewItem} onOpenChange={(open) => !open && setViewItem(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -449,65 +427,64 @@ export default function ProductionList() {
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Identification</h3>
-                <DetailRow label="Code arbre" value={viewItem.code_arbre} />
-                <DetailRow label="Variété" value={<Badge variant="outline">{(viewItem.varietes as any)?.code_variete}</Badge>} />
-                <DetailRow label="Nom commercial" value={(viewItem.varietes as any)?.nom_commercial} />
-                <DetailRow label="Porte-greffe" value={(viewItem.porte_greffes as any)?.code_pg} />
-                <DetailRow label="Domaine" value={(viewItem.domaines as any)?.nom} />
+                <DetailRow label="Code arbre" value={viewItem.codeArbre} />
+                <DetailRow label="Variété" value={<Badge variant="outline">{viewItem.variete?.codeVariete}</Badge>} />
+                <DetailRow label="Nom commercial" value={viewItem.variete?.nomCommercial} />
+                <DetailRow label="Porte-greffe" value={viewItem.porteGreffe?.codePg} />
+                <DetailRow label="Domaine" value={viewItem.domaine?.nom} />
               </div>
               <Separator />
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Position</h3>
-                <DetailRow label="Ligne" value={viewItem.ligne_numero} />
-                <DetailRow label="Position" value={viewItem.position_ligne} />
-                <DetailRow label="Statut arbre" value={viewItem.arbre_statut} />
+                <DetailRow label="Ligne" value={viewItem.ligneNumero} />
+                <DetailRow label="Position" value={viewItem.positionLigne} />
+                <DetailRow label="Statut arbre" value={viewItem.arbreStatut} />
               </div>
               <Separator />
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Récolte</h3>
-                <DetailRow label="Date récolte" value={fmtDate(viewItem.date_recolte)} />
-                <DetailRow label="Poids total (kg)" value={viewItem.poids_total_kg} />
-                <DetailRow label="Nb fruits" value={viewItem.nb_fruits_total} />
-                <DetailRow label="Poids moyen (g)" value={viewItem.poids_moyen_fruit_g?.toFixed(1)} />
-                <DetailRow label="Calibre moyen (mm)" value={viewItem.calibre_moyen_mm} />
-                <DetailRow label="Taux déclassement (%)" value={viewItem.taux_declassement_pct} />
-                <DetailRow label="Qualité globale" value={viewItem.qualite_globale} />
+                <DetailRow label="Date récolte" value={fmtDate(viewItem.dateRecolte)} />
+                <DetailRow label="Poids total (kg)" value={Number(viewItem.poidsTotalKg)} />
+                <DetailRow label="Nb fruits" value={viewItem.nbFruitsTotal} />
+                <DetailRow label="Poids moyen (g)" value={Number(viewItem.poidsMoyenFruitG)?.toFixed(1)} />
+                <DetailRow label="Calibre moyen (mm)" value={Number(viewItem.calibreMoyenMm)} />
+                <DetailRow label="Taux déclassement (%)" value={Number(viewItem.tauxDeclassementPct)} />
+                <DetailRow label="Qualité globale" value={viewItem.qualiteGlobale} />
               </div>
-              {viewItem.photo_url && (
+              {viewItem.photoUrl && (
                 <>
                   <Separator />
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground mb-2">Photo</h3>
-                    <img src={viewItem.photo_url} alt="Production" className="rounded-md max-h-48 w-auto" />
-                    {viewItem.photo_legende && <p className="text-xs text-muted-foreground mt-1">{viewItem.photo_legende}</p>}
+                    <img src={viewItem.photoUrl} alt="Production" className="rounded-md max-h-48 w-auto" />
+                    {viewItem.photoLegende && <p className="text-xs text-muted-foreground mt-1">{viewItem.photoLegende}</p>}
                   </div>
                 </>
               )}
               <Separator />
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Informations</h3>
-                <DetailRow label="Récoltant" value={viewItem.recoltant_nom} />
+                <DetailRow label="Récoltant" value={viewItem.recoltantNom} />
                 <DetailRow label="Observations" value={viewItem.observations || "—"} />
               </div>
               <Separator />
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Workflow</h3>
-                <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statut_validation || "Brouillon"]}>{viewItem.statut_validation}</Badge>} />
-                <DetailRow label="Commentaires" value={viewItem.commentaires_validation || "—"} />
+                <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statutValidation || "Brouillon"]}>{viewItem.statutValidation}</Badge>} />
+                <DetailRow label="Commentaires" value={viewItem.commentairesValidation || "—"} />
               </div>
-              {/* ═══ CALIBRE SECTION ═══ */}
               {(() => {
-                const code = (viewItem.varietes as any)?.code_variete;
-                const pg = (viewItem.porte_greffes as any)?.code_pg;
+                const code = viewItem.variete?.codeVariete;
+                const pg = viewItem.porteGreffe?.codePg;
                 const calType = code ? getCalibreType(code) : null;
                 const entries = getCalibreEntries(calType);
-                const hasData = entries.some(e => (viewItem as any)[e.dbColumn] > 0);
+                const hasData = entries.some(e => Number(viewItem[e.dbColumn]) > 0);
                 if (!hasData) return null;
                 const chartData = entries
                   .map(e => ({
                     calibre: `${e.label} (${e.range})`,
-                    nb: (viewItem as any)[e.dbColumn] || 0,
-                    pct: Math.round(((viewItem as any)[e.dbColumn] || 0) / NB_ECHANTILLON * 100),
+                    nb: Number(viewItem[e.dbColumn]) || 0,
+                    pct: Math.round((Number(viewItem[e.dbColumn]) || 0) / NB_ECHANTILLON * 100),
                   }))
                   .filter(d => d.nb > 0);
                 return (
@@ -515,11 +492,11 @@ export default function ProductionList() {
                     <Separator />
                     <Collapsible defaultOpen>
                       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
-                        <h3 className="text-sm font-semibold text-muted-foreground">📏 Profil Calibre ({NB_ECHANTILLON} fruits)</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground">Profil Calibre ({NB_ECHANTILLON} fruits)</h3>
                         <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                       </CollapsibleTrigger>
                       <CollapsibleContent className="pt-2 space-y-2">
-                        <Badge variant="secondary" className="text-xs">ℹ️ Partagé : {code}-{pg}</Badge>
+                        <Badge variant="secondary" className="text-xs">Partagé : {code}-{pg}</Badge>
                         <div className="h-[200px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
@@ -562,13 +539,12 @@ export default function ProductionList() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ DELETE CONFIRMATION ═══ */}
       <AlertDialog open={!!deleteItem} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
             <AlertDialogDescription>
-              Supprimer la production {deleteItem?.code_arbre} du {deleteItem ? fmtDate(deleteItem.date_recolte) : ""} ?
+              Supprimer la production {deleteItem?.codeArbre} du {deleteItem ? fmtDate(deleteItem.dateRecolte) : ""} ?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

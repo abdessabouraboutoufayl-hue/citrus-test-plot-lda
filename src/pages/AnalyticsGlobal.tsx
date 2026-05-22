@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, productionApi, qualiteApi } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -23,72 +23,66 @@ export default function AnalyticsGlobal() {
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["ag-campagnes"],
-    queryFn: async () => { const { data } = await supabase.from("campagnes").select("*").order("date_debut", { ascending: false }); return data || []; },
+    queryFn: () => refApi.campagnes(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["ag-domaines"],
-    queryFn: async () => { const { data } = await supabase.from("domaines").select("*"); return data || []; },
+    queryFn: () => refApi.domaines(),
   });
 
   const { data: productions = [] } = useQuery({
     queryKey: ["ag-productions"],
-    queryFn: async () => {
-      const { data } = await supabase.from("production").select("*, varietes(code_variete, nom_commercial, type_id), porte_greffes(code_pg), domaines(nom)");
-      return data || [];
-    },
+    queryFn: async () => { const r = await productionApi.list({ limit: 5000 }); return r.data || []; },
   });
 
   const { data: qualites = [] } = useQuery({
     queryKey: ["ag-qualites"],
-    queryFn: async () => {
-      const { data } = await supabase.from("qualite_interne").select("*, varietes(code_variete, type_id), domaines(nom)");
-      return data || [];
-    },
+    queryFn: async () => { const r = await qualiteApi.list({ limit: 5000 }); return r.data || []; },
   });
 
   const { data: typesVarietes = [] } = useQuery({
     queryKey: ["ag-types"],
-    queryFn: async () => { const { data } = await supabase.from("types_varietes").select("*"); return data || []; },
+    queryFn: () => refApi.typesVarietes(),
   });
 
   // Filter data
   const filteredProd = useMemo(() => {
     let d = productions;
-    if (selectedCampagne !== "all") d = d.filter(p => p.campagne_id === Number(selectedCampagne));
-    if (selectedDomaine !== "all") d = d.filter(p => p.domaine_id === Number(selectedDomaine));
-    if (userInfo.role === "responsable_domaine" && userInfo.domaineId) d = d.filter(p => p.domaine_id === userInfo.domaineId);
+    if (selectedCampagne !== "all") d = d.filter((p: any) => p.campagneId === Number(selectedCampagne));
+    if (selectedDomaine !== "all") d = d.filter((p: any) => p.domaineId === Number(selectedDomaine));
+    if (userInfo.role === "responsable_domaine" && userInfo.domaineId) d = d.filter((p: any) => String(p.domaineId) === String(userInfo.domaineId));
     return d;
   }, [productions, selectedCampagne, selectedDomaine, userInfo]);
 
   const filteredQual = useMemo(() => {
     let d = qualites;
-    if (selectedCampagne !== "all") d = d.filter(q => q.campagne_id === Number(selectedCampagne));
-    if (selectedDomaine !== "all") d = d.filter(q => q.domaine_id === Number(selectedDomaine));
-    if (userInfo.role === "responsable_domaine" && userInfo.domaineId) d = d.filter(q => q.domaine_id === userInfo.domaineId);
+    if (selectedCampagne !== "all") d = d.filter((q: any) => q.campagneId === Number(selectedCampagne));
+    if (selectedDomaine !== "all") d = d.filter((q: any) => q.domaineId === Number(selectedDomaine));
+    if (userInfo.role === "responsable_domaine" && userInfo.domaineId) d = d.filter((q: any) => String(q.domaineId) === String(userInfo.domaineId));
     return d;
   }, [qualites, selectedCampagne, selectedDomaine, userInfo]);
 
   // KPIs
-  const totalProd = filteredProd.reduce((s, p) => s + (p.poids_total_kg || 0), 0);
-  const avgPoidsFruit = filteredProd.length ? filteredProd.reduce((s, p) => s + (p.poids_moyen_fruit_g || 0), 0) / filteredProd.length : 0;
-  const avgEA = filteredQual.length ? filteredQual.reduce((s, q) => s + (q.ratio_ea || 0), 0) / filteredQual.length : 0;
-  const avgBrix = filteredQual.length ? filteredQual.reduce((s, q) => s + (q.brix_degres || 0), 0) / filteredQual.length : 0;
-  const maturiteOpt = filteredQual.length ? (filteredQual.filter(q => q.maturite_optimale).length / filteredQual.length) * 100 : 0;
+  const totalProd = filteredProd.reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0);
+  const avgPoidsFruit = filteredProd.length ? filteredProd.reduce((s: number, p: any) => s + (p.poidsMoyenFruitG || 0), 0) / filteredProd.length : 0;
+  const avgEA = filteredQual.length ? filteredQual.reduce((s: number, q: any) => s + (q.ratioEa || 0), 0) / filteredQual.length : 0;
+  const avgBrix = filteredQual.length ? filteredQual.reduce((s: number, q: any) => s + (q.brixDegres || 0), 0) / filteredQual.length : 0;
+  const maturiteOpt = filteredQual.length ? (filteredQual.filter((q: any) => q.maturiteOptimale).length / filteredQual.length) * 100 : 0;
 
   // Scatter: Production vs Qualité par variété
   const scatterData = useMemo(() => {
     const byVar: Record<string, { code: string; prod: number; ea: number; eaCount: number; count: number }> = {};
-    filteredProd.forEach(p => {
-      const c = (p.varietes as any)?.code_variete || "?";
+    filteredProd.forEach((p: any) => {
+      const c = p.variete?.codeVariete || "?";
       if (!byVar[c]) byVar[c] = { code: c, prod: 0, ea: 0, eaCount: 0, count: 0 };
-      byVar[c].prod += p.poids_total_kg || 0;
+      byVar[c].prod += p.poidsTotalKg || 0;
       byVar[c].count += 1;
     });
-    filteredQual.forEach(q => {
-      const c = (q.varietes as any)?.code_variete || "?";
+    filteredQual.forEach((q: any) => {
+      const c = q.variete?.codeVariete || "?";
       if (!byVar[c]) byVar[c] = { code: c, prod: 0, ea: 0, eaCount: 0, count: 0 };
-      byVar[c].ea += q.ratio_ea || 0;
+      byVar[c].ea += q.ratioEa || 0;
       byVar[c].eaCount += 1;
     });
     return Object.values(byVar).filter(v => v.eaCount > 0).map(v => ({
@@ -100,11 +94,11 @@ export default function AnalyticsGlobal() {
   const heatmapData = useMemo(() => {
     const data: { domaine: string; variete: string; value: number }[] = [];
     const vars = new Set<string>();
-    filteredProd.forEach(p => vars.add((p.varietes as any)?.code_variete || "?"));
+    filteredProd.forEach((p: any) => vars.add(p.variete?.codeVariete || "?"));
     const topVars = [...vars].slice(0, 15);
-    domaines.forEach(d => {
+    domaines.forEach((d: any) => {
       topVars.forEach(v => {
-        const total = filteredProd.filter(p => p.domaine_id === d.id && (p.varietes as any)?.code_variete === v).reduce((s, p) => s + (p.poids_total_kg || 0), 0);
+        const total = filteredProd.filter((p: any) => p.domaineId === d.id && p.variete?.codeVariete === v).reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0);
         data.push({ domaine: d.nom, variete: v, value: Math.round(total * 10) / 10 });
       });
     });
@@ -114,32 +108,32 @@ export default function AnalyticsGlobal() {
   // Monthly by domaine
   const monthlyByDomaine = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
-    filteredProd.forEach(p => {
-      const m = p.date_recolte?.substring(0, 7) || "";
-      const d = (p.domaines as any)?.nom || "?";
+    filteredProd.forEach((p: any) => {
+      const m = p.dateRecolte?.substring(0, 7) || "";
+      const d = p.domaine?.nom || "?";
       if (!map[m]) map[m] = {};
-      map[m][d] = (map[m][d] || 0) + (p.poids_total_kg || 0);
+      map[m][d] = (map[m][d] || 0) + (p.poidsTotalKg || 0);
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([month, vals]) => ({ month, ...vals }));
   }, [filteredProd]);
 
   // Radar per domaine
   const radarData = useMemo(() => {
-    return domaines.map(d => {
-      const dP = filteredProd.filter(p => p.domaine_id === d.id);
-      const dQ = filteredQual.filter(q => q.domaine_id === d.id);
+    return domaines.map((d: any) => {
+      const dP = filteredProd.filter((p: any) => p.domaineId === d.id);
+      const dQ = filteredQual.filter((q: any) => q.domaineId === d.id);
       return {
         domaine: d.nom,
-        Production: dP.reduce((s, p) => s + (p.poids_total_kg || 0), 0),
-        Brix: dQ.length ? dQ.reduce((s, q) => s + (q.brix_degres || 0), 0) / dQ.length : 0,
-        EA: dQ.length ? dQ.reduce((s, q) => s + (q.ratio_ea || 0), 0) / dQ.length : 0,
-        Jus: dQ.length ? dQ.reduce((s, q) => s + (q.pct_jus || 0), 0) / dQ.length : 0,
-        Calibre: dP.length ? dP.reduce((s, p) => s + (p.calibre_moyen_mm || 0), 0) / dP.length : 0,
+        Production: dP.reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0),
+        Brix: dQ.length ? dQ.reduce((s: number, q: any) => s + (q.brixDegres || 0), 0) / dQ.length : 0,
+        EA: dQ.length ? dQ.reduce((s: number, q: any) => s + (q.ratioEa || 0), 0) / dQ.length : 0,
+        Jus: dQ.length ? dQ.reduce((s: number, q: any) => s + (q.pctJus || 0), 0) / dQ.length : 0,
+        Calibre: dP.length ? dP.reduce((s: number, p: any) => s + (p.calibreMoyenMm || 0), 0) / dP.length : 0,
       };
     });
   }, [domaines, filteredProd, filteredQual]);
 
-  const domaineNames = domaines.map(d => d.nom);
+  const domaineNames = domaines.map((d: any) => d.nom);
 
   const kpis = [
     { title: "Production (T)", value: (totalProd / 1000).toFixed(2) },
@@ -159,7 +153,7 @@ export default function AnalyticsGlobal() {
             <SelectTrigger className="w-40"><SelectValue placeholder="Campagne" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toutes</SelectItem>
-              {campagnes.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.code_campagne}</SelectItem>)}
+              {campagnes.map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.codeCampagne}</SelectItem>)}
             </SelectContent>
           </Select>
           {userInfo.role !== "responsable_domaine" && (
@@ -167,7 +161,7 @@ export default function AnalyticsGlobal() {
               <SelectTrigger className="w-40"><SelectValue placeholder="Domaine" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous</SelectItem>
-                {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+                {domaines.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
@@ -226,7 +220,7 @@ export default function AnalyticsGlobal() {
                   <tr><th className="text-left p-1">Domaine</th>{heatmapData.vars.map(v => <th key={v} className="p-1 text-center">{v}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {domaines.map(d => (
+                  {domaines.map((d: any) => (
                     <tr key={d.id}>
                       <td className="p-1 font-medium">{d.nom}</td>
                       {heatmapData.vars.map(v => {
@@ -269,11 +263,11 @@ export default function AnalyticsGlobal() {
             <CardContent>
               {(() => {
                 const monthlyQ: Record<string, { brix: number; ea: number; c: number }> = {};
-                filteredQual.forEach(q => {
-                  const m = q.date_analyse?.substring(0, 7) || "";
+                filteredQual.forEach((q: any) => {
+                  const m = q.dateAnalyse?.substring(0, 7) || "";
                   if (!monthlyQ[m]) monthlyQ[m] = { brix: 0, ea: 0, c: 0 };
-                  monthlyQ[m].brix += q.brix_degres || 0;
-                  monthlyQ[m].ea += q.ratio_ea || 0;
+                  monthlyQ[m].brix += q.brixDegres || 0;
+                  monthlyQ[m].ea += q.ratioEa || 0;
                   monthlyQ[m].c += 1;
                 });
                 const data = Object.entries(monthlyQ).sort(([a], [b]) => a.localeCompare(b)).map(([m, v]) => ({ month: m, brix: +(v.brix / v.c).toFixed(1), ea: +(v.ea / v.c).toFixed(1) }));
@@ -338,16 +332,16 @@ export default function AnalyticsGlobal() {
                   </tr>
                 </thead>
                 <tbody>
-                  {campagnes.map(c => {
-                    const cp = productions.filter(p => p.campagne_id === c.id);
-                    const cq = qualites.filter(q => q.campagne_id === c.id);
+                  {campagnes.map((c: any) => {
+                    const cp = productions.filter((p: any) => p.campagneId === c.id);
+                    const cq = qualites.filter((q: any) => q.campagneId === c.id);
                     return (
                       <tr key={c.id} className="border-b">
-                        <td className="p-2 font-medium">{c.code_campagne}</td>
-                        <td className="p-2 text-right">{(cp.reduce((s, p) => s + (p.poids_total_kg || 0), 0) / 1000).toFixed(2)}</td>
+                        <td className="p-2 font-medium">{c.codeCampagne}</td>
+                        <td className="p-2 text-right">{(cp.reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0) / 1000).toFixed(2)}</td>
                         <td className="p-2 text-right">{cp.length}</td>
-                        <td className="p-2 text-right">{cq.length ? (cq.reduce((s, q) => s + (q.ratio_ea || 0), 0) / cq.length).toFixed(1) : "-"}</td>
-                        <td className="p-2 text-right">{cq.length ? (cq.reduce((s, q) => s + (q.brix_degres || 0), 0) / cq.length).toFixed(1) + "°" : "-"}</td>
+                        <td className="p-2 text-right">{cq.length ? (cq.reduce((s: number, q: any) => s + (q.ratioEa || 0), 0) / cq.length).toFixed(1) : "-"}</td>
+                        <td className="p-2 text-right">{cq.length ? (cq.reduce((s: number, q: any) => s + (q.brixDegres || 0), 0) / cq.length).toFixed(1) + "°" : "-"}</td>
                         <td className="p-2 text-right">{cq.length}</td>
                       </tr>
                     );

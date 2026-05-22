@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, adminApi } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,48 +23,40 @@ function DomainesTab() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState({ code: "", nom: "", region: "", responsable_nom: "" });
+  const [form, setForm] = useState({ code: "", nom: "", region: "", responsableNom: "" });
   const [drawOpen, setDrawOpen] = useState(false);
   const [drawDomaine, setDrawDomaine] = useState<any>(null);
 
   const { data: domaines = [], isLoading } = useQuery({
     queryKey: ["admin-domaines"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("domaines").select("*").order("nom");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.domaines(),
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("domaines").insert({
-        code: form.code.trim(),
-        nom: form.nom.trim(),
-        region: form.region.trim(),
-        responsable_nom: form.responsable_nom.trim() || null,
-      });
-      if (error) throw error;
-    },
+    mutationFn: () => refApi.createDomaine({
+      code: form.code.trim(),
+      nom: form.nom.trim(),
+      region: form.region.trim(),
+      responsableNom: form.responsableNom.trim() || null,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
       toast.success("Domaine créé");
       setOpen(false);
-      setForm({ code: "", nom: "", region: "", responsable_nom: "" });
+      setForm({ code: "", nom: "", region: "", responsableNom: "" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editId) return;
-      const { error } = await supabase.from("domaines").update({
+    mutationFn: () => {
+      if (!editId) return Promise.resolve();
+      return refApi.updateDomaine(editId, {
         code: form.code.trim(),
         nom: form.nom.trim(),
         region: form.region.trim(),
-        responsable_nom: form.responsable_nom.trim() || null,
-      }).eq("id", editId);
-      if (error) throw error;
+        responsableNom: form.responsableNom.trim() || null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
@@ -76,10 +68,7 @@ function DomainesTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("domaines").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: number) => refApi.deleteDomaine(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
       toast.success("Domaine supprimé");
@@ -89,7 +78,7 @@ function DomainesTab() {
 
   const openEdit = (d: any) => {
     setEditId(d.id);
-    setForm({ code: d.code, nom: d.nom, region: d.region, responsable_nom: d.responsable_nom || "" });
+    setForm({ code: d.code, nom: d.nom, region: d.region, responsableNom: d.responsableNom || "" });
     setEditOpen(true);
   };
 
@@ -107,7 +96,7 @@ function DomainesTab() {
               <div><Label>Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="DOM01" /></div>
               <div><Label>Nom</Label><Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Domaine Berkane" /></div>
               <div><Label>Région</Label><Input value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} placeholder="Oriental" /></div>
-              <div><Label>Responsable</Label><Input value={form.responsable_nom} onChange={e => setForm({ ...form, responsable_nom: e.target.value })} placeholder="Nom du responsable" /></div>
+              <div><Label>Responsable</Label><Input value={form.responsableNom} onChange={e => setForm({ ...form, responsableNom: e.target.value })} placeholder="Nom du responsable" /></div>
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={!form.code || !form.nom || !form.region || createMutation.isPending}>
@@ -132,15 +121,15 @@ function DomainesTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : domaines.map((d) => (
+            ) : domaines.map((d: any) => (
               <TableRow key={d.id}>
                 <TableCell><Badge variant="outline">{d.code}</Badge></TableCell>
                 <TableCell className="font-medium">{d.nom}</TableCell>
                 <TableCell>{d.region}</TableCell>
-                <TableCell>{d.responsable_nom || "—"}</TableCell>
+                <TableCell>{d.responsableNom || "—"}</TableCell>
                 <TableCell>
-                  {(d as any).superficie_ha ? (
-                    <Badge variant="secondary">{(d as any).superficie_ha} ha</Badge>
+                  {d.superficieHa ? (
+                    <Badge variant="secondary">{d.superficieHa} ha</Badge>
                   ) : (
                     <span className="text-muted-foreground text-xs">—</span>
                   )}
@@ -168,7 +157,7 @@ function DomainesTab() {
             <div><Label>Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} /></div>
             <div><Label>Nom</Label><Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} /></div>
             <div><Label>Région</Label><Input value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} /></div>
-            <div><Label>Responsable</Label><Input value={form.responsable_nom} onChange={e => setForm({ ...form, responsable_nom: e.target.value })} /></div>
+            <div><Label>Responsable</Label><Input value={form.responsableNom} onChange={e => setForm({ ...form, responsableNom: e.target.value })} /></div>
           </div>
           <DialogFooter>
             <Button onClick={() => updateMutation.mutate()} disabled={!form.code || !form.nom || !form.region || updateMutation.isPending}>
@@ -184,16 +173,15 @@ function DomainesTab() {
           domaineName={drawDomaine.nom}
           latitude={drawDomaine.latitude}
           longitude={drawDomaine.longitude}
-          existingGeoJSON={(drawDomaine as any).superficie_geojson}
+          existingGeoJSON={drawDomaine.superficieGeojson}
           onSave={async (geojson, superficieHa) => {
-            const { error } = await supabase.from("domaines").update({
-              superficie_geojson: geojson,
-              superficie_ha: superficieHa,
-            } as any).eq("id", drawDomaine.id);
-            if (error) { toast.error(error.message); return; }
-            queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
-            queryClient.invalidateQueries({ queryKey: ["gps-domaines"] });
-            toast.success(`Superficie enregistrée : ${superficieHa} ha`);
+            try {
+              await refApi.updateDomaine(drawDomaine.id, { superficieGeojson: geojson, superficieHa });
+              queryClient.invalidateQueries({ queryKey: ["admin-domaines"] });
+              toast.success(`Superficie enregistrée : ${superficieHa} ha`);
+            } catch (e: any) {
+              toast.error(e.message);
+            }
           }}
         />
       )}
@@ -207,53 +195,41 @@ function VarietesTab() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState({ code_variete: "", nom_commercial: "", type_id: "" });
+  const [form, setForm] = useState({ codeVariete: "", nomCommercial: "", typeId: "" });
 
   const { data: varietes = [], isLoading } = useQuery({
     queryKey: ["admin-varietes"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("varietes").select("*, types_varietes(type_nom)").order("code_variete");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.varietes(),
   });
 
   const { data: types = [] } = useQuery({
     queryKey: ["types-varietes"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("types_varietes").select("*").order("type_nom");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.typesVarietes(),
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("varietes").insert({
-        code_variete: form.code_variete.trim(),
-        nom_commercial: form.nom_commercial.trim() || null,
-        type_id: form.type_id ? Number(form.type_id) : null,
-      });
-      if (error) throw error;
-    },
+    mutationFn: () => refApi.createVariete({
+      codeVariete: form.codeVariete.trim(),
+      nomCommercial: form.nomCommercial.trim() || null,
+      typeId: form.typeId ? Number(form.typeId) : null,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-varietes"] });
       toast.success("Variété créée");
       setOpen(false);
-      setForm({ code_variete: "", nom_commercial: "", type_id: "" });
+      setForm({ codeVariete: "", nomCommercial: "", typeId: "" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editId) return;
-      const { error } = await supabase.from("varietes").update({
-        code_variete: form.code_variete.trim(),
-        nom_commercial: form.nom_commercial.trim() || null,
-        type_id: form.type_id ? Number(form.type_id) : null,
-      }).eq("id", editId);
-      if (error) throw error;
+    mutationFn: () => {
+      if (!editId) return Promise.resolve();
+      return refApi.updateVariete(editId, {
+        codeVariete: form.codeVariete.trim(),
+        nomCommercial: form.nomCommercial.trim() || null,
+        typeId: form.typeId ? Number(form.typeId) : null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-varietes"] });
@@ -265,10 +241,7 @@ function VarietesTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("varietes").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: number) => refApi.deleteVariete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-varietes"] });
       toast.success("Variété supprimée");
@@ -278,7 +251,7 @@ function VarietesTab() {
 
   const openEdit = (v: any) => {
     setEditId(v.id);
-    setForm({ code_variete: v.code_variete, nom_commercial: v.nom_commercial || "", type_id: v.type_id ? String(v.type_id) : "" });
+    setForm({ codeVariete: v.codeVariete, nomCommercial: v.nomCommercial || "", typeId: v.typeId ? String(v.typeId) : "" });
     setEditOpen(true);
   };
 
@@ -293,20 +266,20 @@ function VarietesTab() {
           <DialogContent>
             <DialogHeader><DialogTitle>Nouvelle variété</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Code variété</Label><Input value={form.code_variete} onChange={e => setForm({ ...form, code_variete: e.target.value })} placeholder="VAR001" /></div>
-              <div><Label>Nom commercial</Label><Input value={form.nom_commercial} onChange={e => setForm({ ...form, nom_commercial: e.target.value })} placeholder="Navel" /></div>
+              <div><Label>Code variété</Label><Input value={form.codeVariete} onChange={e => setForm({ ...form, codeVariete: e.target.value })} placeholder="VAR001" /></div>
+              <div><Label>Nom commercial</Label><Input value={form.nomCommercial} onChange={e => setForm({ ...form, nomCommercial: e.target.value })} placeholder="Navel" /></div>
               <div>
                 <Label>Type</Label>
-                <Select value={form.type_id} onValueChange={v => setForm({ ...form, type_id: v })}>
+                <Select value={form.typeId} onValueChange={v => setForm({ ...form, typeId: v })}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
                   <SelectContent>
-                    {types.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                    {types.map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.typeNom}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={!form.code_variete || createMutation.isPending}>
+              <Button onClick={() => createMutation.mutate()} disabled={!form.codeVariete || createMutation.isPending}>
                 Créer
               </Button>
             </DialogFooter>
@@ -326,11 +299,11 @@ function VarietesTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : varietes.map((v) => (
+            ) : varietes.map((v: any) => (
               <TableRow key={v.id}>
-                <TableCell><Badge variant="outline">{v.code_variete}</Badge></TableCell>
-                <TableCell className="font-medium">{v.nom_commercial || "—"}</TableCell>
-                <TableCell>{(v.types_varietes as any)?.type_nom || "—"}</TableCell>
+                <TableCell><Badge variant="outline">{v.codeVariete}</Badge></TableCell>
+                <TableCell className="font-medium">{v.nomCommercial || "—"}</TableCell>
+                <TableCell>{v.typeVariete?.typeNom || "—"}</TableCell>
                 <TableCell className="flex gap-1">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                     <Pencil className="h-4 w-4" />
@@ -348,20 +321,20 @@ function VarietesTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>Modifier la variété</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Code variété</Label><Input value={form.code_variete} onChange={e => setForm({ ...form, code_variete: e.target.value })} /></div>
-            <div><Label>Nom commercial</Label><Input value={form.nom_commercial} onChange={e => setForm({ ...form, nom_commercial: e.target.value })} /></div>
+            <div><Label>Code variété</Label><Input value={form.codeVariete} onChange={e => setForm({ ...form, codeVariete: e.target.value })} /></div>
+            <div><Label>Nom commercial</Label><Input value={form.nomCommercial} onChange={e => setForm({ ...form, nomCommercial: e.target.value })} /></div>
             <div>
               <Label>Type</Label>
-              <Select value={form.type_id} onValueChange={v => setForm({ ...form, type_id: v })}>
+              <Select value={form.typeId} onValueChange={v => setForm({ ...form, typeId: v })}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
                 <SelectContent>
-                  {types.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                  {types.map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.typeNom}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => updateMutation.mutate()} disabled={!form.code_variete || updateMutation.isPending}>
+            <Button onClick={() => updateMutation.mutate()} disabled={!form.codeVariete || updateMutation.isPending}>
               Enregistrer
             </Button>
           </DialogFooter>
@@ -374,85 +347,42 @@ function VarietesTab() {
 // ─── Utilisateurs Tab ───────────────────────────────────────────
 function UtilisateursTab() {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ user_id: "", role: "", domaine_id: "" });
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ role: "", domaineId: "" });
 
-  const { data: roles = [], isLoading } = useQuery({
-    queryKey: ["admin-user-roles"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("*, profiles:user_id(email, nom_complet), domaines:domaine_id(nom)")
-        .order("user_id");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["admin-profiles"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id, email, nom_complet").order("email");
-      if (error) throw error;
-      return data;
-    },
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: () => adminApi.listUsers(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["admin-domaines"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("domaines").select("id, nom").order("nom");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: form.user_id,
-        role: form.role as any,
-        domaine_id: form.domaine_id ? Number(form.domaine_id) : null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
-      toast.success("Rôle assigné");
-      setOpen(false);
-      setForm({ user_id: "", role: "", domaine_id: "" });
-    },
-    onError: (e: Error) => toast.error(e.message),
+    queryFn: () => refApi.domaines(),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editId) return;
-      const { error } = await supabase.from("user_roles").update({
-        role: form.role as any,
-        domaine_id: form.domaine_id ? Number(form.domaine_id) : null,
-      }).eq("id", editId);
-      if (error) throw error;
+    mutationFn: () => {
+      if (!editUser) return Promise.resolve();
+      return adminApi.updateUser(editUser.id, {
+        role: editForm.role,
+        domaineId: editForm.domaineId ? Number(editForm.domaineId) : null,
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
-      toast.success("Rôle modifié");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Utilisateur modifié");
       setEditOpen(false);
-      setEditId(null);
+      setEditUser(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("user_roles").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => adminApi.deleteUser(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
-      toast.success("Rôle supprimé");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Utilisateur supprimé");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -463,62 +393,16 @@ function UtilisateursTab() {
     direction: "Direction",
   };
 
-  const openEdit = (r: any) => {
-    setEditId(r.id);
-    setForm({ user_id: r.user_id, role: r.role, domaine_id: r.domaine_id ? String(r.domaine_id) : "" });
+  const openEdit = (u: any) => {
+    setEditUser(u);
+    setEditForm({ role: u.role || "", domaineId: u.domaineId ? String(u.domaineId) : "" });
     setEditOpen(true);
   };
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader>
         <CardTitle className="text-lg">Utilisateurs & Rôles</CardTitle>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><PlusCircle className="h-4 w-4 mr-1" /> Assigner</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Assigner un rôle</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Utilisateur</Label>
-                <Select value={form.user_id} onValueChange={v => setForm({ ...form, user_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un utilisateur" /></SelectTrigger>
-                  <SelectContent>
-                    {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.email}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Rôle</Label>
-                <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
-                    <SelectItem value="responsable_central">Responsable Central</SelectItem>
-                    <SelectItem value="direction">Direction</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.role === "responsable_domaine" && (
-                <div>
-                  <Label>Domaine</Label>
-                  <Select value={form.domaine_id} onValueChange={v => setForm({ ...form, domaine_id: v })}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
-                    <SelectContent>
-                      {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={!form.user_id || !form.role || createMutation.isPending}>
-                Assigner
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </CardHeader>
       <CardContent>
         <Table>
@@ -534,17 +418,17 @@ function UtilisateursTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : roles.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>{(r.profiles as any)?.email || "—"}</TableCell>
-                <TableCell>{(r.profiles as any)?.nom_complet || "—"}</TableCell>
-                <TableCell><Badge>{roleLabels[r.role] || r.role}</Badge></TableCell>
-                <TableCell>{(r.domaines as any)?.nom || "—"}</TableCell>
+            ) : users.map((u: any) => (
+              <TableRow key={u.id}>
+                <TableCell>{u.email}</TableCell>
+                <TableCell>{u.nomComplet || "—"}</TableCell>
+                <TableCell><Badge>{roleLabels[u.role] || u.role || "—"}</Badge></TableCell>
+                <TableCell>{u.domaine?.nom || "—"}</TableCell>
                 <TableCell className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(r)}>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(r.id)}>
+                  <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(u.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </TableCell>
@@ -555,11 +439,11 @@ function UtilisateursTab() {
       </CardContent>
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Modifier le rôle</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Modifier l'utilisateur</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
               <Label>Rôle</Label>
-              <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
+              <Select value={editForm.role} onValueChange={v => setEditForm({ ...editForm, role: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
@@ -568,20 +452,20 @@ function UtilisateursTab() {
                 </SelectContent>
               </Select>
             </div>
-            {form.role === "responsable_domaine" && (
+            {editForm.role === "responsable_domaine" && (
               <div>
                 <Label>Domaine</Label>
-                <Select value={form.domaine_id} onValueChange={v => setForm({ ...form, domaine_id: v })}>
+                <Select value={editForm.domaineId} onValueChange={v => setEditForm({ ...editForm, domaineId: v })}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
                   <SelectContent>
-                    {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+                    {domaines.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => updateMutation.mutate()} disabled={!form.role || updateMutation.isPending}>
+            <Button onClick={() => updateMutation.mutate()} disabled={!editForm.role || updateMutation.isPending}>
               Enregistrer
             </Button>
           </DialogFooter>
@@ -607,56 +491,32 @@ function DomaineVarietesTab() {
 
   const { data: links = [], isLoading } = useQuery({
     queryKey: ["admin-domaine-varietes"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("domaine_varietes")
-        .select("*, domaines(nom, code), varietes(code_variete, nom_commercial), porte_greffes(code_pg, nom_pg)")
-        .order("domaine_id");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.domaineVarietes(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["admin-domaines"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("domaines").select("id, nom").order("nom");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.domaines(),
   });
 
   const { data: varietes = [] } = useQuery({
     queryKey: ["admin-varietes-simple"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("varietes").select("id, code_variete, nom_commercial, type_id").order("code_variete");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.varietes(),
   });
 
   const { data: typesVarietes = [] } = useQuery({
     queryKey: ["types-varietes"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("types_varietes").select("*").order("type_nom");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.typesVarietes(),
   });
 
   const { data: porteGreffes = [] } = useQuery({
     queryKey: ["admin-porte-greffes"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("porte_greffes").select("id, code_pg, nom_pg").order("nom_pg");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => refApi.porteGreffes(),
   });
 
-  // Filter already linked for selected domaine + porte-greffe combo
   const linkedVarieteIds = links
-    .filter(l => String(l.domaine_id) === selectedDomaine && String(l.porte_greffe_id) === selectedPorteGreffe)
-    .map(l => String(l.variete_id));
+    .filter((l: any) => String(l.domaineId) === selectedDomaine && String(l.porteGreffeId) === selectedPorteGreffe)
+    .map((l: any) => String(l.varieteId));
 
   const toggleVariete = (id: string) => {
     setSelectedVarietes(prev =>
@@ -666,14 +526,14 @@ function DomaineVarietesTab() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const rows = selectedVarietes.map(vid => ({
-        domaine_id: Number(selectedDomaine),
-        variete_id: Number(vid),
-        porte_greffe_id: Number(selectedPorteGreffe),
-        nb_arbres: Number(nbArbres) || 5,
-      }));
-      const { error } = await supabase.from("domaine_varietes").insert(rows);
-      if (error) throw error;
+      for (const vid of selectedVarietes) {
+        await refApi.createDomaineVariete({
+          domaineId: Number(selectedDomaine),
+          varieteId: Number(vid),
+          porteGreffeId: Number(selectedPorteGreffe),
+          nbArbres: Number(nbArbres) || 5,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaine-varietes"] });
@@ -689,12 +549,9 @@ function DomaineVarietesTab() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editId) return;
-      const { error } = await supabase.from("domaine_varietes").update({
-        nb_arbres: Number(editNbArbres) || 5,
-      }).eq("id", editId);
-      if (error) throw error;
+    mutationFn: () => {
+      if (!editId) return Promise.resolve();
+      return refApi.updateDomaineVariete(editId, { nbArbres: Number(editNbArbres) || 5 });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaine-varietes"] });
@@ -706,10 +563,7 @@ function DomaineVarietesTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("domaine_varietes").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: number) => refApi.deleteDomaineVariete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-domaine-varietes"] });
       toast.success("Association supprimée");
@@ -717,8 +571,8 @@ function DomaineVarietesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const filteredLinks = filterDomaine
-    ? links.filter(l => String(l.domaine_id) === filterDomaine)
+  const filteredLinks = filterDomaine && filterDomaine !== "all"
+    ? links.filter((l: any) => String(l.domaineId) === filterDomaine)
     : links;
 
   return (
@@ -730,7 +584,7 @@ function DomaineVarietesTab() {
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filtrer par domaine" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tous les domaines</SelectItem>
-              {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+              {domaines.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
             </SelectContent>
           </Select>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -745,7 +599,7 @@ function DomaineVarietesTab() {
                   <Select value={selectedDomaine} onValueChange={v => { setSelectedDomaine(v); setSelectedType(""); setSelectedVarietes([]); setSelectedPorteGreffe(""); }}>
                     <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
                     <SelectContent>
-                      {domaines.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
+                      {domaines.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.nom}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -755,18 +609,18 @@ function DomaineVarietesTab() {
                     <Select value={selectedType} onValueChange={v => { setSelectedType(v); setSelectedVarietes([]); }}>
                       <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
                       <SelectContent>
-                        {typesVarietes.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.type_nom}</SelectItem>)}
+                        {typesVarietes.map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.typeNom}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
                 {selectedDomaine && selectedType && (
                   <div>
-                    <Label className="mb-2 block">Codes variétés ({typesVarietes.find(t => String(t.id) === selectedType)?.type_nom})</Label>
+                    <Label className="mb-2 block">Codes variétés ({typesVarietes.find((t: any) => String(t.id) === selectedType)?.typeNom})</Label>
                     <div className="max-h-48 overflow-y-auto space-y-2 border rounded-md p-3">
                       {varietes
-                        .filter(v => String(v.type_id) === selectedType && !linkedVarieteIds.includes(String(v.id)))
-                        .map(v => (
+                        .filter((v: any) => String(v.typeId) === selectedType && !linkedVarieteIds.includes(String(v.id)))
+                        .map((v: any) => (
                           <div key={v.id} className="flex items-center gap-2">
                             <Checkbox
                               id={`var-${v.id}`}
@@ -774,11 +628,11 @@ function DomaineVarietesTab() {
                               onCheckedChange={() => toggleVariete(String(v.id))}
                             />
                             <label htmlFor={`var-${v.id}`} className="text-sm cursor-pointer">
-                              {v.code_variete} — {v.nom_commercial || ""}
+                              {v.codeVariete} — {v.nomCommercial || ""}
                             </label>
                           </div>
                         ))}
-                      {varietes.filter(v => String(v.type_id) === selectedType && !linkedVarieteIds.includes(String(v.id))).length === 0 && (
+                      {varietes.filter((v: any) => String(v.typeId) === selectedType && !linkedVarieteIds.includes(String(v.id))).length === 0 && (
                         <p className="text-sm text-muted-foreground">Toutes les variétés de ce type sont déjà associées.</p>
                       )}
                     </div>
@@ -790,7 +644,7 @@ function DomaineVarietesTab() {
                     <Select value={selectedPorteGreffe} onValueChange={setSelectedPorteGreffe}>
                       <SelectTrigger><SelectValue placeholder="Sélectionner un porte-greffe" /></SelectTrigger>
                       <SelectContent>
-                        {porteGreffes.map(pg => <SelectItem key={pg.id} value={String(pg.id)}>{pg.code_pg} — {pg.nom_pg}</SelectItem>)}
+                        {porteGreffes.map((pg: any) => <SelectItem key={pg.id} value={String(pg.id)}>{pg.codePg} — {pg.nomPg}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -826,14 +680,14 @@ function DomaineVarietesTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
-            ) : filteredLinks.map((l) => (
+            ) : filteredLinks.map((l: any) => (
               <TableRow key={l.id}>
-                <TableCell className="font-medium">{(l.domaines as any)?.nom}</TableCell>
-                <TableCell><Badge variant="outline">{(l.varietes as any)?.code_variete}</Badge></TableCell>
-                <TableCell>{(l.porte_greffes as any)?.code_pg || "—"}</TableCell>
-                <TableCell>{l.nb_arbres}</TableCell>
+                <TableCell className="font-medium">{l.domaine?.nom}</TableCell>
+                <TableCell><Badge variant="outline">{l.variete?.codeVariete}</Badge></TableCell>
+                <TableCell>{l.porteGreffe?.codePg || "—"}</TableCell>
+                <TableCell>{l.nbArbres}</TableCell>
                 <TableCell className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => { setEditId(l.id); setEditNbArbres(String(l.nb_arbres)); setEditOpen(true); }}>
+                  <Button variant="ghost" size="icon" onClick={() => { setEditId(l.id); setEditNbArbres(String(l.nbArbres)); setEditOpen(true); }}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(l.id)}>

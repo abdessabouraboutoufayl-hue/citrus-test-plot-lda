@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, productionApi, qualiteApi, phenologieApi } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,87 +17,75 @@ export default function AnalyticsExecutive() {
 
   const { data: productions = [] } = useQuery({
     queryKey: ["exec-productions"],
-    queryFn: async () => {
-      const { data } = await supabase.from("production").select("*, varietes(code_variete, nom_commercial, type_id), porte_greffes(code_pg), domaines(nom)");
-      return data || [];
-    },
+    queryFn: async () => { const r = await productionApi.list({ limit: 5000 }); return r.data || []; },
   });
 
   const { data: qualites = [] } = useQuery({
     queryKey: ["exec-qualites"],
-    queryFn: async () => {
-      const { data } = await supabase.from("qualite_interne").select("*, varietes(code_variete, type_id), domaines(nom)");
-      return data || [];
-    },
+    queryFn: async () => { const r = await qualiteApi.list({ limit: 5000 }); return r.data || []; },
   });
 
   const { data: phenologies = [] } = useQuery({
     queryKey: ["exec-phenologies"],
-    queryFn: async () => {
-      const { data } = await supabase.from("phenologie").select("*, varietes(code_variete), domaines(nom), campagnes(code_campagne)");
-      return data || [];
-    },
+    queryFn: () => phenologieApi.list(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["exec-domaines"],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaines").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.domaines(),
   });
 
   // KPIs Production
-  const totalProdKg = productions.reduce((s, p) => s + (p.poids_total_kg || 0), 0);
+  const totalProdKg = productions.reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0);
   const totalArbres = productions.length;
-  const avgPoidsFruit = totalArbres ? productions.reduce((s, p) => s + (p.poids_moyen_fruit_g || 0), 0) / totalArbres : 0;
-  const qualiteAB = totalArbres ? (productions.filter(p => p.qualite_globale === "A" || p.qualite_globale === "B").length / totalArbres) * 100 : 0;
+  const avgPoidsFruit = totalArbres ? productions.reduce((s: number, p: any) => s + (p.poidsMoyenFruitG || 0), 0) / totalArbres : 0;
+  const qualiteAB = totalArbres ? (productions.filter((p: any) => p.qualiteGlobale === "A" || p.qualiteGlobale === "B").length / totalArbres) * 100 : 0;
 
   // KPIs Qualité
-  const avgEA = qualites.length ? qualites.reduce((s, q) => s + (q.ratio_ea || 0), 0) / qualites.length : 0;
-  const avgBrix = qualites.length ? qualites.reduce((s, q) => s + (q.brix_degres || 0), 0) / qualites.length : 0;
-  const maturiteOpt = qualites.length ? (qualites.filter(q => q.maturite_optimale).length / qualites.length) * 100 : 0;
-  const granSevere = qualites.length ? (qualites.filter(q => q.alerte_granulation_severe).length / qualites.length) * 100 : 0;
+  const avgEA = qualites.length ? qualites.reduce((s: number, q: any) => s + (q.ratioEa || 0), 0) / qualites.length : 0;
+  const avgBrix = qualites.length ? qualites.reduce((s: number, q: any) => s + (q.brixDegres || 0), 0) / qualites.length : 0;
+  const maturiteOpt = qualites.length ? (qualites.filter((q: any) => q.maturiteOptimale).length / qualites.length) * 100 : 0;
+  const granSevere = qualites.length ? (qualites.filter((q: any) => q.alerteGranulationSevere).length / qualites.length) * 100 : 0;
 
   // Top 5 variétés par production
   const prodByVariete: Record<string, { code: string; total: number }> = {};
-  productions.forEach(p => {
-    const code = (p.varietes as any)?.code_variete || "?";
+  productions.forEach((p: any) => {
+    const code = p.variete?.codeVariete || "?";
     if (!prodByVariete[code]) prodByVariete[code] = { code, total: 0 };
-    prodByVariete[code].total += p.poids_total_kg || 0;
+    prodByVariete[code].total += p.poidsTotalKg || 0;
   });
   const top5Prod = Object.values(prodByVariete).sort((a, b) => b.total - a.total).slice(0, 5);
 
   // Top 5 variétés par E/A
   const eaByVariete: Record<string, { code: string; total: number; count: number }> = {};
-  qualites.forEach(q => {
-    const code = (q.varietes as any)?.code_variete || "?";
+  qualites.forEach((q: any) => {
+    const code = q.variete?.codeVariete || "?";
     if (!eaByVariete[code]) eaByVariete[code] = { code, total: 0, count: 0 };
-    eaByVariete[code].total += q.ratio_ea || 0;
+    eaByVariete[code].total += q.ratioEa || 0;
     eaByVariete[code].count += 1;
   });
   const top5EA = Object.values(eaByVariete).map(v => ({ code: v.code, avg: v.count ? v.total / v.count : 0 })).sort((a, b) => b.avg - a.avg).slice(0, 5);
 
   // Domaines performance
-  const domainePerf = domaines.map(d => {
-    const dProds = productions.filter(p => p.domaine_id === d.id);
-    const dQuals = qualites.filter(q => q.domaine_id === d.id);
-    const prodScore = dProds.reduce((s, p) => s + (p.poids_total_kg || 0), 0);
-    const qualScore = dQuals.length ? dQuals.reduce((s, q) => s + (q.ratio_ea || 0), 0) / dQuals.length : 0;
+  const domainePerf = domaines.map((d: any) => {
+    const dProds = productions.filter((p: any) => p.domaineId === d.id);
+    const dQuals = qualites.filter((q: any) => q.domaineId === d.id);
+    const prodScore = dProds.reduce((s: number, p: any) => s + (p.poidsTotalKg || 0), 0);
+    const qualScore = dQuals.length ? dQuals.reduce((s: number, q: any) => s + (q.ratioEa || 0), 0) / dQuals.length : 0;
     return { nom: d.nom, prodScore: Math.round(prodScore * 10) / 10, qualScore: Math.round(qualScore * 10) / 10 };
-  }).sort((a, b) => (b.prodScore + b.qualScore * 10) - (a.prodScore + a.qualScore * 10));
+  }).sort((a: any, b: any) => (b.prodScore + b.qualScore * 10) - (a.prodScore + a.qualScore * 10));
 
   // Monthly evolution
   const monthlyData: Record<string, { month: string; prod: number; ea: number; count: number }> = {};
-  productions.forEach(p => {
-    const m = p.date_recolte?.substring(0, 7) || "";
+  productions.forEach((p: any) => {
+    const m = p.dateRecolte?.substring(0, 7) || "";
     if (!monthlyData[m]) monthlyData[m] = { month: m, prod: 0, ea: 0, count: 0 };
-    monthlyData[m].prod += p.poids_total_kg || 0;
+    monthlyData[m].prod += p.poidsTotalKg || 0;
   });
-  qualites.forEach(q => {
-    const m = q.date_analyse?.substring(0, 7) || "";
+  qualites.forEach((q: any) => {
+    const m = q.dateAnalyse?.substring(0, 7) || "";
     if (!monthlyData[m]) monthlyData[m] = { month: m, prod: 0, ea: 0, count: 0 };
-    monthlyData[m].ea += q.ratio_ea || 0;
+    monthlyData[m].ea += q.ratioEa || 0;
     monthlyData[m].count += 1;
   });
   const chartData = Object.values(monthlyData).map(d => ({
@@ -173,9 +161,9 @@ export default function AnalyticsExecutive() {
                 <p className="text-xs text-muted-foreground">Avancement Cycle</p>
                 <p className="text-3xl font-bold text-foreground">{phenologies.length} suivis</p>
                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  <p>Observations actives : {phenologies.filter(p => !p.stade_maturite_recolte_date).length}</p>
-                  <p>Cycles terminés : {phenologies.filter(p => p.stade_maturite_recolte_date).length}</p>
-                  <p>Alertes floraison : {phenologies.filter(p => p.alerte_floraison_tardive).length}</p>
+                  <p>Observations actives : {phenologies.filter((p: any) => !p.stadeMaturiteRecolteDate).length}</p>
+                  <p>Cycles terminés : {phenologies.filter((p: any) => p.stadeMaturiteRecolteDate).length}</p>
+                  <p>Alertes floraison : {phenologies.filter((p: any) => p.alerteFloraisonTardive).length}</p>
                 </div>
               </div>
             </div>

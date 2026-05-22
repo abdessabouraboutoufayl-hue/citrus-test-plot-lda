@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { productionApi, qualiteApi, phenologieApi } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart, Bar } from "recharts";
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function AnalysesCroisees() {
   const { userInfo } = useAuth();
@@ -14,49 +14,46 @@ export default function AnalysesCroisees() {
   const { data: productions = [] } = useQuery({
     queryKey: ["ac-prod"],
     queryFn: async () => {
-      let q = supabase.from("production").select("*, varietes(code_variete, type_id), porte_greffes(code_pg, nom_pg), domaines(nom)");
-      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) q = q.eq("domaine_id", userInfo.domaineId);
-      const { data } = await q;
-      return data || [];
+      const r = await productionApi.list({
+        domaineId: userInfo.role === "responsable_domaine" && userInfo.domaineId ? String(userInfo.domaineId) : undefined,
+        limit: 5000,
+      });
+      return r.data || [];
     },
   });
 
   const { data: qualites = [] } = useQuery({
     queryKey: ["ac-qual"],
     queryFn: async () => {
-      let q = supabase.from("qualite_interne").select("*, varietes(code_variete, type_id), porte_greffes(code_pg, nom_pg)");
-      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) q = q.eq("domaine_id", userInfo.domaineId);
-      const { data } = await q;
-      return data || [];
+      const r = await qualiteApi.list({
+        domaineId: userInfo.role === "responsable_domaine" && userInfo.domaineId ? String(userInfo.domaineId) : undefined,
+        limit: 5000,
+      });
+      return r.data || [];
     },
   });
 
   const { data: phenologies = [] } = useQuery({
     queryKey: ["ac-pheno"],
-    queryFn: async () => {
-      let q = supabase.from("phenologie").select("*, varietes(code_variete)");
-      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) q = q.eq("domaine_id", userInfo.domaineId);
-      const { data } = await q;
-      return data || [];
-    },
+    queryFn: () => phenologieApi.list(),
   });
 
   // Section 1: Floraison → Production
   const floraisonData = useMemo(() => {
     const byVar: Record<string, { code: string; intensite: number; prod: number; count: number }> = {};
-    phenologies.forEach(p => {
-      const code = (p.varietes as any)?.code_variete || "?";
+    phenologies.forEach((p: any) => {
+      const code = p.variete?.codeVariete || "?";
       const intensiteMap: Record<string, number> = { "Faible": 1, "Moyenne": 2, "Élevée": 3 };
-      const intensite = intensiteMap[p.stade_floraison_intensite || ""] || 0;
+      const intensite = intensiteMap[p.stadeFloraisonIntensite || ""] || 0;
       if (intensite > 0) {
         if (!byVar[code]) byVar[code] = { code, intensite: 0, prod: 0, count: 0 };
         byVar[code].intensite = Math.max(byVar[code].intensite, intensite);
       }
     });
-    productions.forEach(p => {
-      const code = (p.varietes as any)?.code_variete || "?";
+    productions.forEach((p: any) => {
+      const code = p.variete?.codeVariete || "?";
       if (byVar[code]) {
-        byVar[code].prod += p.poids_total_kg || 0;
+        byVar[code].prod += p.poidsTotalKg || 0;
         byVar[code].count += 1;
       }
     });
@@ -68,17 +65,17 @@ export default function AnalysesCroisees() {
   // Section 2: Chute physio → Déclassement
   const chuteData = useMemo(() => {
     const byVar: Record<string, { code: string; taux: number; declassement: number; count: number }> = {};
-    phenologies.forEach(p => {
-      const code = (p.varietes as any)?.code_variete || "?";
-      if (p.stade_chute_physio_taux_pct != null) {
+    phenologies.forEach((p: any) => {
+      const code = p.variete?.codeVariete || "?";
+      if (p.stadeChutePhysioTauxPct != null) {
         if (!byVar[code]) byVar[code] = { code, taux: 0, declassement: 0, count: 0 };
-        byVar[code].taux = Math.max(byVar[code].taux, p.stade_chute_physio_taux_pct || 0);
+        byVar[code].taux = Math.max(byVar[code].taux, p.stadeChutePhysioTauxPct || 0);
       }
     });
-    productions.forEach(p => {
-      const code = (p.varietes as any)?.code_variete || "?";
+    productions.forEach((p: any) => {
+      const code = p.variete?.codeVariete || "?";
       if (byVar[code]) {
-        byVar[code].declassement += p.taux_declassement_pct || 0;
+        byVar[code].declassement += p.tauxDeclassementPct || 0;
         byVar[code].count += 1;
       }
     });
@@ -87,22 +84,22 @@ export default function AnalysesCroisees() {
     }));
   }, [phenologies, productions]);
 
-  // Section 4: Performance PG
+  // Section 3: Performance PG
   const pgData = useMemo(() => {
     const byPG: Record<string, { pg: string; nom: string; prod: number; prodC: number; ea: number; brix: number; qualC: number }> = {};
-    productions.forEach(p => {
-      const pg = (p.porte_greffes as any)?.code_pg || "?";
-      const nom = (p.porte_greffes as any)?.nom_pg || pg;
+    productions.forEach((p: any) => {
+      const pg = p.porteGreffe?.codePg || "?";
+      const nom = p.porteGreffe?.nomPg || pg;
       if (!byPG[pg]) byPG[pg] = { pg, nom, prod: 0, prodC: 0, ea: 0, brix: 0, qualC: 0 };
-      byPG[pg].prod += p.poids_total_kg || 0;
+      byPG[pg].prod += p.poidsTotalKg || 0;
       byPG[pg].prodC += 1;
     });
-    qualites.forEach(q => {
-      const pg = (q.porte_greffes as any)?.code_pg || "?";
-      const nom = (q.porte_greffes as any)?.nom_pg || pg;
+    qualites.forEach((q: any) => {
+      const pg = q.porteGreffe?.codePg || "?";
+      const nom = q.porteGreffe?.nomPg || pg;
       if (!byPG[pg]) byPG[pg] = { pg, nom, prod: 0, prodC: 0, ea: 0, brix: 0, qualC: 0 };
-      byPG[pg].ea += q.ratio_ea || 0;
-      byPG[pg].brix += q.brix_degres || 0;
+      byPG[pg].ea += q.ratioEa || 0;
+      byPG[pg].brix += q.brixDegres || 0;
       byPG[pg].qualC += 1;
     });
     return Object.values(byPG).map(v => ({
@@ -174,7 +171,7 @@ export default function AnalysesCroisees() {
         </CardContent>
       </Card>
 
-      {/* Section 4: Performance PG */}
+      {/* Section 3: Performance PG */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Performance Porte-Greffes</CardTitle>

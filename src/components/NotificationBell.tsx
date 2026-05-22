@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { notifApi, tokenStore } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,66 +18,60 @@ export function NotificationBell() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
 
   const { data: notifications = [] } = useQuery({
     queryKey: ["notifications", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => notifApi.list(),
     enabled: !!user,
-    refetchInterval: 30000,
+    refetchInterval: 30_000,
   });
 
-  // Realtime subscription
+  // SSE â€” replaces supabase.channel("notifications-realtime")
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
-      .channel("notifications-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
+
+    const token = tokenStore.get();
+    if (!token) return;
+
+    // EventSource doesn't support custom headers; pass token as query param
+    const url = `${notifApi.streamUrl()}?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    esRef.current = es;
+
+    es.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        // New notification INSERT or init â†’ invalidate query
+        if (payload.type === 'new_notification' || payload.type === 'init') {
           queryClient.invalidateQueries({ queryKey: ["notifications", user.id] });
         }
-      )
-      .subscribe();
+      } catch {
+        // ignore parse errors
+      }
+    };
 
-    return () => { supabase.removeChannel(channel); };
+    es.onerror = () => {
+      // EventSource auto-reconnects; no manual retry needed
+    };
+
+    return () => {
+      es.close();
+      esRef.current = null;
+    };
   }, [user?.id, queryClient]);
 
-  const unreadCount = notifications.filter((n: any) => !n.is_read).length;
+  const unreadCount = notifications.filter((n: any) => !n.isRead).length;
 
   const markAsReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    },
+    mutationFn: (id: string) => notifApi.markRead(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] });
     },
   });
 
   const markAllReadMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) return;
-      await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", user.id)
-        .eq("is_read", false);
-    },
+    mutationFn: () => notifApi.markAllRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] });
     },
@@ -122,23 +116,23 @@ export function NotificationBell() {
               <div
                 key={n.id}
                 className={`px-4 py-3 border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors ${
-                  !n.is_read ? "bg-primary/5" : ""
+                  !n.isRead ? "bg-primary/5" : ""
                 }`}
                 onClick={() => {
-                  if (!n.is_read) markAsReadMutation.mutate(n.id);
+                  if (!n.isRead) markAsReadMutation.mutate(n.id);
                 }}
               >
                 <div className="flex items-start gap-2">
-                  {!n.is_read && (
+                  {!n.isRead && (
                     <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{n.title}</p>
+                    <p className="text-sm font-medium">{n.titre}</p>
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                       {n.message}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      {formatDistanceToNow(new Date(n.created_at), {
+                      {formatDistanceToNow(new Date(n.createdAt), {
                         addSuffix: true,
                         locale: fr,
                       })}
@@ -153,3 +147,4 @@ export function NotificationBell() {
     </Popover>
   );
 }
+
