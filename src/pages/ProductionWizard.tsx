@@ -22,7 +22,7 @@ import { Save, Camera, Upload, AlertTriangle, ArrowLeft, X } from "lucide-react"
 import CalibreStep from "@/components/production/CalibreStep";
 import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, calibreFromRecord, type CalibreType } from "@/lib/calibre-config";
 import imageCompression from "browser-image-compression";
-import { v4 as uuidv4 } from "uuid";
+const uuidv4 = () => crypto.randomUUID();
 
 const schema = z.object({
   domaine_id: z.string().uuid("Domaine requis"),
@@ -187,10 +187,10 @@ export default function ProductionWizard() {
       // Offline mode — store in Dexie
       if (!isOnline) {
         await db.offlineProductions.add({
-          domaine_id: domaineId,
-          campagne_id: data.campagne_id,
-          variete_id: data.variete_id,
-          porte_greffe_id: data.porte_greffe_id,
+          domaine_id: Number(domaineId),
+          campagne_id: Number(data.campagne_id),
+          variete_id: Number(data.variete_id),
+          porte_greffe_id: Number(data.porte_greffe_id),
           ligne_numero: data.ligne_numero,
           position_ligne: data.position_ligne,
           date_recolte: data.date_recolte,

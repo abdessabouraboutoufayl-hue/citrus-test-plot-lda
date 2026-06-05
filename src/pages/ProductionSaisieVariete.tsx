@@ -69,7 +69,7 @@ export default function ProductionSaisieVariete() {
   const [calibreValues, setCalibreValues] = useState<Record<string, number>>({});
 
   const isCentral = userInfo.role === "responsable_central";
-  const effectiveDomaineId = isCentral ? domaineId : userInfo.domaineId;
+  const effectiveDomaineId: number | null = isCentral ? domaineId : (userInfo.domaineId ? Number(userInfo.domaineId) : null);
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
