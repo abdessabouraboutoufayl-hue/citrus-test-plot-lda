@@ -30,6 +30,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import GestionUtilisateurs from "@/pages/GestionUtilisateurs";
 import NoAccess from "@/pages/NoAccess";
 import GuestAccess from "@/pages/GuestAccess";
+import AdminAccess from "@/pages/AdminAccess";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ function AppRoutes() {
       <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/guest" element={<GuestAccess />} />
+      <Route path="/admin-access" element={<AdminAccess />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
