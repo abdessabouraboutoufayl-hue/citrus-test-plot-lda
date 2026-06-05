@@ -51,6 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // Démo : token local, pas d'appel backend
+        if (payload.demo) {
+          setUser({ id: payload.sub, email: payload.email });
+          setUserInfo({
+            role: payload.role as AppRole,
+            domaineId: payload.domaineId ?? null,
+            nomComplet: payload.nomComplet ?? null,
+            email: payload.email,
+          });
+          setLoading(false);
+          return;
+        }
+
         const profile = await authApi.me();
         setUser({ id: payload.sub, email: payload.email });
         setUserInfo({
@@ -59,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nomComplet: profile.nomComplet ?? null,
           email: profile.email,
         });
+
       } catch {
         tokenStore.clear();
       } finally {
