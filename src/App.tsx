@@ -49,7 +49,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login" element={<Navigate to="/dashboard" replace />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/guest" element={<GuestAccess />} />
       <Route path="/admin-access" element={<AdminAccess />} />
