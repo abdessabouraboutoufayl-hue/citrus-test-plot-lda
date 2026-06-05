@@ -1,7 +1,8 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { productionApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { getCalibreType, mapExcelCalibreToDb, validateExcelCalibreSum, NB_ECHANTILLON } from "@/lib/calibre-config";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,14 +15,14 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { Upload, Check, X, ChevronDown, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { Upload, Check, X, Image, Archive, Camera, ChevronDown, ChevronRight, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import JSZip from "jszip";
 import imageCompression from "browser-image-compression";
 
 interface ImportRow {
-  codeVariete: string;
-  codePg: string;
+  code_variete: string;
+  code_pg: string;
   ligne: number;
   position: number;
   poids: number;
@@ -36,24 +37,24 @@ interface ImportRow {
   error?: string;
   photoFile?: File;
   photoKey?: string;
-  rawRow?: Record<string, any>;
+  rawRow?: Record<string, any>;  // Keep raw Excel row for calibre mapping
 }
 
 interface Variete {
   id: number;
-  codeVariete: string;
-  nomCommercial: string | null;
+  code_variete: string;
+  nom_commercial: string | null;
 }
 
 interface PorteGreffe {
   id: number;
-  codePg: string;
-  nomPg: string;
+  code_pg: string;
+  nom_pg: string;
 }
 
 interface Campagne {
   id: number;
-  codeCampagne: string;
+  code_campagne: string;
 }
 
 interface Props {
@@ -66,6 +67,7 @@ interface Props {
 }
 
 const ACCEPTED_IMG_EXT = [".jpg", ".jpeg", ".png", ".webp"];
+const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
 const MAX_ZIP_SIZE = 50 * 1024 * 1024;
 
 function buildPhotoKey(code: string, pg: string, ligne: number, pos: number): string {
@@ -74,16 +76,18 @@ function buildPhotoKey(code: string, pg: string, ligne: number, pos: number): st
 
 async function compressPhoto(file: File): Promise<File> {
   return imageCompression(file, {
-    maxSizeMB: 0.3, maxWidthOrHeight: 1920, useWebWorker: true, fileType: "image/jpeg",
+    maxSizeMB: 0.3,
+    maxWidthOrHeight: 1920,
+    useWebWorker: true,
+    fileType: "image/jpeg",
   });
 }
 
-const toCamel = (s: string) => s.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
-
 export default function ImportUploadPreview({
-  varietes, porteGreffes, effectiveDomaineId, campagneId, dateRecolte,
+  varietes, porteGreffes, effectiveDomaineId, campagneId, dateRecolte, campagnes,
 }: Props) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -91,12 +95,17 @@ export default function ImportUploadPreview({
 
   const [uploadOpen, setUploadOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
+
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [photoMap, setPhotoMap] = useState<Map<string, File>>(new Map());
+  const [photoFileName, setPhotoFileName] = useState("");
   const [importProgress, setImportProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [missingPhotos, setMissingPhotos] = useState<ImportRow[]>([]);
+  const [showMissing, setShowMissing] = useState(false);
 
+  // Parse Excel
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -122,8 +131,8 @@ export default function ImportUploadPreview({
           const recoltant = String(row.Recoltant || row.recoltant || "").trim();
           const observations = String(row.Observations || row.observations || "").trim();
 
-          const foundVar = varietes.find(v => v.codeVariete.toLowerCase() === code.toLowerCase());
-          const foundPG = porteGreffes.find(p => p.codePg.toLowerCase() === pg.toLowerCase());
+          const foundVar = varietes.find(v => v.code_variete.toLowerCase() === code.toLowerCase());
+          const foundPG = porteGreffes.find(p => p.code_pg.toLowerCase() === pg.toLowerCase());
 
           let error: string | undefined;
           if (!foundVar) error = `Variété "${code}" inconnue`;
@@ -132,8 +141,9 @@ export default function ImportUploadPreview({
           else if (pos < 1 || pos > 25) error = "Position hors limites (1-25)";
           else if (statut === "Normal" && poids <= 0) error = "Poids requis > 0";
 
+          // Validate calibre sum based on variety type
           if (!error && foundVar && statut === "Normal") {
-            const calType = getCalibreType(foundVar.codeVariete);
+            const calType = getCalibreType(foundVar.code_variete);
             const { valid: calValid, sum: calSum } = validateExcelCalibreSum(row, calType);
             if (!calValid) {
               const normLabel = calType === "navel" ? "Navel (_N)" : "Mandarine (_M)";
@@ -144,7 +154,7 @@ export default function ImportUploadPreview({
           const photoKey = buildPhotoKey(code, pg, ligne, pos);
 
           return {
-            codeVariete: code, codePg: pg,
+            code_variete: code, code_pg: pg,
             ligne, position: pos, poids, fruits, calibre, declassement,
             qualite, statut, recoltant, observations,
             valid: !error, error, photoKey,
@@ -164,6 +174,7 @@ export default function ImportUploadPreview({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Photos multi-select
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -177,11 +188,13 @@ export default function ImportUploadPreview({
       count++;
     }
     setPhotoMap(newMap);
+    setPhotoFileName(`${count} photos`);
     setImportRows(prev => prev.map(r => ({ ...r, photoFile: newMap.get(r.photoKey || "") })));
     toast.success(`${count} photos chargées`);
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
 
+  // ZIP
   const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -204,6 +217,7 @@ export default function ImportUploadPreview({
       });
       await Promise.all(promises);
       setPhotoMap(newMap);
+      setPhotoFileName(`ZIP: ${count} photos`);
       setImportRows(prev => prev.map(r => ({ ...r, photoFile: newMap.get(r.photoKey || "") })));
       toast.success(`${count} photos extraites`);
     } catch { toast.error("Erreur ZIP"); }
@@ -217,76 +231,153 @@ export default function ImportUploadPreview({
   const grouped = useMemo(() => {
     const map = new Map<string, ImportRow[]>();
     importRows.forEach(r => {
-      const key = `${r.codeVariete} > ${r.codePg}`;
+      const key = `${r.code_variete} > ${r.code_pg}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(r);
     });
     return map;
   }, [importRows]);
 
+  // Import
   const handleImport = async () => {
-    if (!effectiveDomaineId || !campagneId) { toast.error("Données incomplètes"); return; }
+    if (!user || !effectiveDomaineId || !campagneId) { toast.error("Données incomplètes"); return; }
     if (validRows.length === 0) { toast.error("Aucune ligne valide"); return; }
 
     setIsImporting(true);
     setImportProgress(0);
+    let photoCount = 0;
+    const missList: ImportRow[] = [];
 
     try {
-      for (let i = 0; i < validRows.length; i++) {
-        const r = validRows[i];
-        const v = varietes.find(va => va.codeVariete.toLowerCase() === r.codeVariete.toLowerCase())!;
-        const pg = porteGreffes.find(p => p.codePg.toLowerCase() === r.codePg.toLowerCase())!;
+      const inserts = validRows.map(r => {
+        const v = varietes.find(va => va.code_variete.toLowerCase() === r.code_variete.toLowerCase())!;
+        const pg = porteGreffes.find(p => p.code_pg.toLowerCase() === r.code_pg.toLowerCase())!;
         const isNormal = r.statut === "Normal";
 
-        const calType = getCalibreType(v.codeVariete);
+        // Map calibre Excel columns to DB columns
+        const calType = getCalibreType(v.code_variete);
         const calibreDbValues = isNormal && r.rawRow ? mapExcelCalibreToDb(r.rawRow, calType) : {};
-        const calibreCamel = Object.fromEntries(Object.entries(calibreDbValues).map(([k, v]) => [toCamel(k), v]));
 
-        const payload: Record<string, any> = {
-          domaineId: effectiveDomaineId,
-          campagneId,
-          varieteId: v.id,
-          porteGreffeId: pg.id,
-          ligneNumero: r.ligne,
-          positionLigne: r.position,
-          dateRecolte,
-          poidsTotalKg: isNormal ? r.poids : 0,
-          nbFruitsTotal: isNormal ? r.fruits : 0,
-          calibreMoyenMm: isNormal ? r.calibre : null,
-          tauxDeclassementPct: isNormal ? r.declassement : null,
-          qualiteGlobale: isNormal ? r.qualite : null,
-          recoltantNom: r.recoltant || null,
+        return {
+          domaine_id: effectiveDomaineId,
+          campagne_id: campagneId,
+          variete_id: v.id,
+          porte_greffe_id: pg.id,
+          ligne_numero: r.ligne,
+          position_ligne: r.position,
+          date_recolte: dateRecolte,
+          poids_total_kg: isNormal ? r.poids : 0,
+          nb_fruits_total: isNormal ? r.fruits : 0,
+          calibre_moyen_mm: isNormal ? r.calibre : null,
+          taux_declassement_pct: isNormal ? r.declassement : null,
+          qualite_globale: isNormal ? r.qualite : null,
+          recoltant_nom: r.recoltant || null,
           observations: r.observations || null,
-          statutValidation: "Brouillon",
-          arbreStatut: r.statut,
-          arbreInclusCalculs: isNormal,
-          ...(isNormal ? calibreCamel : {}),
+          statut_validation: "Brouillon",
+          user_id: user.id,
+          arbre_statut: r.statut,
+          arbre_inclus_calculs: isNormal,
+          ...calibreDbValues,
         };
+      });
 
-        if (r.photoFile) {
-          const compressed = await compressPhoto(r.photoFile);
-          const fd = new FormData();
-          Object.entries(payload).forEach(([k, v]) => {
-            if (v !== null && v !== undefined) fd.append(k, String(v));
-          });
-          fd.append("photo", compressed);
-          await productionApi.create(fd);
-        } else {
-          await productionApi.createJson(payload);
+      const { data: inserted, error } = await supabase.from("production").insert(inserts).select("id, code_arbre");
+      if (error) throw error;
+
+      if (inserted) {
+        for (let i = 0; i < validRows.length; i++) {
+          const row = validRows[i];
+          const record = inserted[i];
+          setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
+          if (row.photoFile) {
+            try {
+              const compressed = await compressPhoto(row.photoFile);
+              const storagePath = `${row.code_variete}_${row.code_pg}_${dateRecolte}_${record.id}.jpg`;
+              const { error: upErr } = await supabase.storage
+                .from("production-photos")
+                .upload(storagePath, compressed, { contentType: "image/jpeg", upsert: true });
+              if (!upErr) {
+                const { data: urlData } = supabase.storage.from("production-photos").getPublicUrl(storagePath);
+                await supabase.from("production").update({ photo_url: urlData.publicUrl }).eq("id", record.id);
+                photoCount++;
+              }
+            } catch { missList.push(row); }
+          } else {
+            missList.push(row);
+          }
         }
-
-        setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
       }
 
       queryClient.invalidateQueries({ queryKey: ["productions"] });
-      toast.success(`${validRows.length} arbres importés`);
-      navigate("/production");
+      toast.success(`${validRows.length} arbres + ${photoCount} photos importés`);
+
+      if (missList.length > 0) {
+        setMissingPhotos(missList);
+        setShowMissing(true);
+      } else {
+        navigate("/production");
+      }
     } catch (err: any) {
       toast.error(err.message || "Erreur d'import");
     } finally {
       setIsImporting(false);
     }
   };
+
+  // Missing photos view
+  if (showMissing) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Camera className="h-5 w-5 text-primary" />
+            Photos manquantes ({missingPhotos.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead><TableHead>PG</TableHead>
+                <TableHead>Ligne</TableHead><TableHead>Pos</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {missingPhotos.map((r, i) => (
+                <TableRow key={i}>
+                  <TableCell>{r.code_variete}</TableCell>
+                  <TableCell>{r.code_pg}</TableCell>
+                  <TableCell>{r.ligne}</TableCell>
+                  <TableCell>{r.position}</TableCell>
+                  <TableCell>
+                    <input type="file" accept=".jpg,.jpeg,.png,.webp" className="text-xs w-48"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          const compressed = await compressPhoto(f);
+                          const storagePath = `${r.code_variete}_${r.code_pg}_${dateRecolte}_missing_${i}.jpg`;
+                          await supabase.storage.from("production-photos").upload(storagePath, compressed, { contentType: "image/jpeg", upsert: true });
+                          setMissingPhotos(prev => prev.filter((_, idx) => idx !== i));
+                          toast.success(`Photo ajoutée`);
+                        } catch { toast.error("Erreur upload"); }
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => navigate("/production")}>
+              {missingPhotos.length > 0 ? "Passer" : "Terminer"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -316,26 +407,6 @@ export default function ImportUploadPreview({
                 </div>
                 <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Photos individuelles (optionnel)</label>
-                <div
-                  className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                  onClick={() => photoInputRef.current?.click()}
-                >
-                  <p className="text-sm text-muted-foreground">Photos séparées (.jpg, .png, .webp)</p>
-                </div>
-                <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Archive ZIP de photos (optionnel)</label>
-                <div
-                  className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                  onClick={() => zipInputRef.current?.click()}
-                >
-                  <p className="text-sm text-muted-foreground">Archive .zip (max 50MB)</p>
-                </div>
-                <input ref={zipInputRef} type="file" accept=".zip" className="hidden" onChange={handleZipUpload} />
-              </div>
             </CardContent>
           </CollapsibleContent>
         </Card>
@@ -355,6 +426,7 @@ export default function ImportUploadPreview({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="space-y-4">
+                {/* Counters */}
                 <div className="flex flex-wrap gap-3">
                   <Badge variant="secondary">{validRows.length} valides</Badge>
                   <Badge variant="destructive">{importRows.length - validRows.length} erreurs</Badge>
@@ -363,11 +435,12 @@ export default function ImportUploadPreview({
                   </Badge>
                   {missingPhotoCount > 0 && (
                     <Badge variant="outline" className="gap-1 text-amber-600">
-                      ⚠️ {missingPhotoCount} sans photo
+                      ⚠️ {missingPhotoCount} manquantes
                     </Badge>
                   )}
                 </div>
 
+                {/* Grouped table */}
                 <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <Table>
                     <TableHeader>
@@ -393,10 +466,10 @@ export default function ImportUploadPreview({
                             <TableCell>
                               {r.photoFile
                                 ? <Check className="h-4 w-4 text-green-600" />
-                                : <span className="text-amber-500 text-xs">—</span>}
+                                : <span className="text-amber-500 text-xs">⚠️</span>}
                             </TableCell>
-                            <TableCell className="font-mono text-xs">{r.codeVariete}</TableCell>
-                            <TableCell className="font-mono text-xs">{r.codePg}</TableCell>
+                            <TableCell className="font-mono text-xs">{r.code_variete}</TableCell>
+                            <TableCell className="font-mono text-xs">{r.code_pg}</TableCell>
                             <TableCell>{r.ligne}</TableCell>
                             <TableCell>{r.position}</TableCell>
                             <TableCell>{r.poids}</TableCell>
@@ -412,6 +485,7 @@ export default function ImportUploadPreview({
                   </Table>
                 </div>
 
+                {/* Import progress */}
                 {isImporting && (
                   <div className="space-y-2">
                     <Progress value={importProgress} />
@@ -419,6 +493,7 @@ export default function ImportUploadPreview({
                   </div>
                 )}
 
+                {/* Actions */}
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => { setImportRows([]); setFileName(""); }}>
                     Annuler
@@ -429,7 +504,7 @@ export default function ImportUploadPreview({
                     className="gap-2"
                   >
                     <Upload className="h-4 w-4" />
-                    {isImporting ? "Import en cours..." : `Importer ${validRows.length} arbres`}
+                    {isImporting ? "Import en cours..." : `Importer ${validRows.length} arbres + ${matchedPhotos} photos`}
                   </Button>
                 </div>
               </CardContent>

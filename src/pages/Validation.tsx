@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, getCalibreColor } from "@/lib/calibre-config";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { productionApi, qualiteApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,23 +79,36 @@ export default function Validation() {
   const { data: pendingProd = [] } = useQuery({
     queryKey: ["pending-validation-prod"],
     queryFn: async () => {
-      const result = await productionApi.list({ statut: "Soumis", limit: 1000 });
-      return result.data || [];
+      const { data, error } = await supabase
+        .from("production")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg, nom_pg), domaines(nom, code), campagnes(code_campagne)")
+        .eq("statut_validation", "Soumis")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const { data: pendingQualite = [] } = useQuery({
     queryKey: ["pending-validation-qualite"],
     queryFn: async () => {
-      const result = await qualiteApi.list({ statut: "Soumis", limit: 1000 });
-      return (result.data || []) as any[];
+      const { data, error } = await supabase
+        .from("qualite_interne")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg, nom_pg), domaines(nom, code), campagnes(code_campagne)")
+        .eq("statut_validation", "Soumis")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
     },
   });
 
   // ─── Mutations ───
   const validateProdMutation = useMutation({
     mutationFn: async ({ ids, status, comment }: { ids: number[]; status: string; comment?: string }) => {
-      await productionApi.bulkValidate(ids, status as "Validé" | "Rejeté", comment);
+      const { error } = await supabase.from("production")
+        .update({ statut_validation: status, commentaires_validation: comment || null })
+        .in("id", ids);
+      if (error) throw error;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["pending-validation-prod"] });
@@ -106,7 +119,10 @@ export default function Validation() {
 
   const validateQualiteMutation = useMutation({
     mutationFn: async ({ id, status, comment }: { id: number; status: string; comment?: string }) => {
-      await qualiteApi.validate(id, status as "Validé" | "Rejeté", comment);
+      const { error } = await supabase.from("qualite_interne")
+        .update({ statut_validation: status, commentaires_validation: comment || null } as any)
+        .eq("id", id);
+      if (error) throw error;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["pending-validation-qualite"] });
@@ -138,17 +154,17 @@ export default function Validation() {
   // ─── Filtered production data ───
   const filteredProd = useMemo(() => {
     let items = pendingProd;
-    if (filterDomaine !== "all") items = items.filter(p => String(p.domaine?.nom) === filterDomaine);
-    if (filterAlertes) items = items.filter(p => ["attention", "critique"].includes(p.niveauAlerte));
+    if (filterDomaine !== "all") items = items.filter(p => String((p.domaines as any)?.nom) === filterDomaine);
+    if (filterAlertes) items = items.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte));
     return items;
   }, [pendingProd, filterDomaine, filterAlertes]);
 
   // ─── KPI ───
   const kpi = useMemo(() => {
     const total = pendingProd.length;
-    const withAlertes = pendingProd.filter(p => ["attention", "critique"].includes(p.niveauAlerte)).length;
-    const okCount = pendingProd.filter(p => ["ok", "mineur"].includes(p.niveauAlerte || "ok")).length;
-    const domaines = new Set(pendingProd.map(p => p.domaine?.nom)).size;
+    const withAlertes = pendingProd.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte)).length;
+    const okCount = pendingProd.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).length;
+    const domaines = new Set(pendingProd.map(p => (p.domaines as any)?.nom)).size;
     return { total, withAlertes, okCount, domaines };
   }, [pendingProd]);
 
@@ -156,7 +172,7 @@ export default function Validation() {
   const groupedProd = useMemo(() => {
     const groups: Record<string, typeof filteredProd> = {};
     filteredProd.forEach(p => {
-      const nom = p.domaine?.nom || "Inconnu";
+      const nom = (p.domaines as any)?.nom || "Inconnu";
       if (!groups[nom]) groups[nom] = [];
       groups[nom].push(p);
     });
@@ -165,7 +181,7 @@ export default function Validation() {
 
   const groupedQualite: Record<string, any[]> = {};
   pendingQualite.forEach((a: any) => {
-    const nom = a.domaine?.nom || "Inconnu";
+    const nom = a.domaines?.nom || "Inconnu";
     if (!groupedQualite[nom]) groupedQualite[nom] = [];
     groupedQualite[nom].push(a);
   });
@@ -205,7 +221,7 @@ export default function Validation() {
     });
   };
 
-  const uniqueDomaines = [...new Set(pendingProd.map(p => p.domaine?.nom || "Inconnu"))];
+  const uniqueDomaines = [...new Set(pendingProd.map(p => (p.domaines as any)?.nom || "Inconnu"))];
 
   if (!isCentral && !isResponsableDomaine) {
     return <div className="text-center py-12 text-muted-foreground">Accès réservé aux responsables</div>;
@@ -213,11 +229,11 @@ export default function Validation() {
 
   const getAlertDetails = (p: any) => {
     const alerts: { level: string; message: string }[] = [];
-    if (p.alertePoidsCritique) alerts.push({ level: "critique", message: `Poids ${p.poidsTotalKg}kg dépasse le seuil critique` });
-    if (p.alertePoidsAberrant) alerts.push({ level: "attention", message: `Poids ${p.poidsTotalKg}kg hors plage normale` });
-    if (p.alerteFruitsAnormal) alerts.push({ level: "attention", message: `Nb fruits ${p.nbFruitsTotal} anormal` });
-    if (p.alertePoidsMoyenAnormal) alerts.push({ level: "mineur", message: `Poids moyen fruit ${p.poidsMoyenFruitG?.toFixed(0)}g anormal` });
-    if (p.alerteDeclassementCritique) alerts.push({ level: "critique", message: `Déclassement ${p.tauxDeclassementPct}% critique` });
+    if (p.alerte_poids_critique) alerts.push({ level: "critique", message: `Poids ${p.poids_total_kg}kg dépasse le seuil critique` });
+    if (p.alerte_poids_aberrant) alerts.push({ level: "attention", message: `Poids ${p.poids_total_kg}kg hors plage normale` });
+    if (p.alerte_fruits_anormal) alerts.push({ level: "attention", message: `Nb fruits ${p.nb_fruits_total} anormal` });
+    if (p.alerte_poids_moyen_anormal) alerts.push({ level: "mineur", message: `Poids moyen fruit ${p.poids_moyen_fruit_g?.toFixed(0)}g anormal` });
+    if (p.alerte_declassement_critique) alerts.push({ level: "critique", message: `Déclassement ${p.taux_declassement_pct}% critique` });
     return alerts;
   };
 
@@ -316,10 +332,10 @@ export default function Validation() {
 
           {/* Accordions by domain */}
           {Object.entries(groupedProd).map(([domaine, items]) => {
-            const alertCount = items.filter(p => ["attention", "critique"].includes(p.niveauAlerte)).length;
-            const critiques = items.filter(p => p.niveauAlerte === "critique");
-            const attentions = items.filter(p => p.niveauAlerte === "attention");
-            const totalKg = items.reduce((s, p) => s + Number(p.poidsTotalKg || 0), 0);
+            const alertCount = items.filter(p => ["attention", "critique"].includes((p as any).niveau_alerte)).length;
+            const critiques = items.filter(p => (p as any).niveau_alerte === "critique");
+            const attentions = items.filter(p => (p as any).niveau_alerte === "attention");
+            const totalKg = items.reduce((s, p) => s + Number(p.poids_total_kg || 0), 0);
             const isOpen = openDomaines.has(domaine);
 
             return (
@@ -353,7 +369,7 @@ export default function Validation() {
                               <p className="text-xs font-semibold text-destructive">🔴 CRITIQUES ({critiques.length})</p>
                               {critiques.map(p => (
                                 <p key={p.id} className="text-xs text-muted-foreground ml-4">
-                                  {p.codeArbre}: {getAlertDetails(p).filter(a => a.level === "critique").map(a => a.message).join(", ")}
+                                  {p.code_arbre}: {getAlertDetails(p).filter(a => a.level === "critique").map(a => a.message).join(", ")}
                                 </p>
                               ))}
                             </div>
@@ -363,7 +379,7 @@ export default function Validation() {
                               <p className="text-xs font-semibold text-orange-600 dark:text-orange-400">🟠 ATTENTION ({attentions.length})</p>
                               {attentions.map(p => (
                                 <p key={p.id} className="text-xs text-muted-foreground ml-4">
-                                  {p.codeArbre}: {getAlertDetails(p).filter(a => a.level === "attention").map(a => a.message).join(", ")}
+                                  {p.code_arbre}: {getAlertDetails(p).filter(a => a.level === "attention").map(a => a.message).join(", ")}
                                 </p>
                               ))}
                             </div>
@@ -389,14 +405,14 @@ export default function Validation() {
                             {items.map(p => (
                               <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
                                 {isCentral && <td className="p-2"><Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} /></td>}
-                                <td className="p-2"><NiveauBadge niveau={p.niveauAlerte} /></td>
+                                <td className="p-2"><NiveauBadge niveau={(p as any).niveau_alerte} /></td>
                                 <td className="p-2">
-                                  <span className="font-mono font-semibold">{p.codeArbre}</span>
-                                  <span className="text-xs text-muted-foreground ml-1">({p.variete?.codeVariete})</span>
+                                  <span className="font-mono font-semibold">{p.code_arbre}</span>
+                                  <span className="text-xs text-muted-foreground ml-1">({(p.varietes as any)?.code_variete})</span>
                                 </td>
-                                <td className="p-2">{p.poidsTotalKg} kg</td>
-                                <td className="p-2">{p.nbFruitsTotal}</td>
-                                <td className="p-2 hidden sm:table-cell">{p.qualiteGlobale || "—"}</td>
+                                <td className="p-2">{p.poids_total_kg} kg</td>
+                                <td className="p-2">{p.nb_fruits_total}</td>
+                                <td className="p-2 hidden sm:table-cell">{p.qualite_globale || "—"}</td>
                                 <td className="p-2 text-right">
                                   <div className="flex justify-end gap-1">
                                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewItem({ type: "production", data: p })}>
@@ -429,18 +445,18 @@ export default function Validation() {
                           <Button
                             size="sm"
                             onClick={() => {
-                              const okIds = items.filter(p => ["ok", "mineur"].includes(p.niveauAlerte || "ok")).map(p => p.id);
+                              const okIds = items.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).map(p => p.id);
                               if (okIds.length > 0) validateProdMutation.mutate({ ids: okIds, status: "Validé" });
                             }}
                             disabled={validateProdMutation.isPending}
                           >
-                            <CheckCircle className="h-4 w-4 mr-1" /> Valider OK ({items.filter(p => ["ok", "mineur"].includes(p.niveauAlerte || "ok")).length})
+                            <CheckCircle className="h-4 w-4 mr-1" /> Valider OK ({items.filter(p => ["ok", "mineur"].includes((p as any).niveau_alerte || "ok")).length})
                           </Button>
                         </div>
                       )}
                       <div className="text-xs text-muted-foreground flex flex-wrap gap-4">
                         <span>Production totale : {totalKg.toFixed(1)} kg</span>
-                        <span>Qualité A+B : {items.filter(p => p.qualiteGlobale === "A" || p.qualiteGlobale === "B").length}/{items.length}</span>
+                        <span>Qualité A+B : {items.filter(p => p.qualite_globale === "A" || p.qualite_globale === "B").length}/{items.length}</span>
                       </div>
                     </div>
                   </CollapsibleContent>
@@ -463,19 +479,19 @@ export default function Validation() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline">{a.variete?.codeVariete}</Badge>
-                          <span className="text-sm text-muted-foreground">{a.porteGreffe?.codePg}</span>
-                          <span className="text-sm text-muted-foreground">{fmtDate(a.dateAnalyse)}</span>
+                          <Badge variant="outline">{a.varietes?.code_variete}</Badge>
+                          <span className="text-sm text-muted-foreground">{a.porte_greffes?.code_pg}</span>
+                          <span className="text-sm text-muted-foreground">{fmtDate(a.date_analyse)}</span>
                         </div>
                         <div className="flex items-center gap-3 text-sm">
-                          <span>Brix {a.brixDegres}°</span>
-                          <span>Acidité {a.aciditeGl} g/L</span>
-                          <EaBadgeInline value={a.ratioEa} />
+                          <span>Brix {a.brix_degres}°</span>
+                          <span>Acidité {a.acidite_gl} g/L</span>
+                          <EaBadgeInline value={a.ratio_ea} />
                         </div>
                         <div className="flex gap-2 flex-wrap">
-                          {a.alerteEaFaible && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />E/A faible</Badge>}
-                          {a.alerteBrixHorsNorme && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Brix hors norme</Badge>}
-                          {a.maturiteOptimale && <Badge className="bg-success/20 text-success text-xs">✅ Maturité optimale</Badge>}
+                          {a.alerte_ea_faible && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />E/A faible</Badge>}
+                          {a.alerte_brix_hors_norme && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Brix hors norme</Badge>}
+                          {a.maturite_optimale && <Badge className="bg-success/20 text-success text-xs">✅ Maturité optimale</Badge>}
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -571,29 +587,29 @@ export default function Validation() {
                 )}
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Identification</p>
-                  <DetailRow label="Domaine" value={p.domaine?.nom} />
-                  <DetailRow label="Campagne" value={p.campagne?.codeCampagne} />
-                  <DetailRow label="Code arbre" value={<span className="font-mono">{p.codeArbre}</span>} />
-                  <DetailRow label="Variété" value={`${p.variete?.codeVariete} ${p.variete?.nomCommercial ? `(${p.variete.nomCommercial})` : ""}`} />
-                  <DetailRow label="Porte-greffe" value={`${p.porteGreffe?.codePg} — ${p.porteGreffe?.nomPg || ""}`} />
+                  <DetailRow label="Domaine" value={(p.domaines as any)?.nom} />
+                  <DetailRow label="Campagne" value={(p.campagnes as any)?.code_campagne} />
+                  <DetailRow label="Code arbre" value={<span className="font-mono">{p.code_arbre}</span>} />
+                  <DetailRow label="Variété" value={`${(p.varietes as any)?.code_variete} ${(p.varietes as any)?.nom_commercial ? `(${(p.varietes as any).nom_commercial})` : ""}`} />
+                  <DetailRow label="Porte-greffe" value={`${(p.porte_greffes as any)?.code_pg} — ${(p.porte_greffes as any)?.nom_pg || ""}`} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Position & Récolte</p>
-                  <DetailRow label="Ligne / Position" value={`L${p.ligneNumero} — P${p.positionLigne}`} />
-                  <DetailRow label="Date récolte" value={fmtDate(p.dateRecolte)} />
-                  <DetailRow label="Récoltant" value={p.recoltantNom || "—"} />
+                  <DetailRow label="Ligne / Position" value={`L${p.ligne_numero} — P${p.position_ligne}`} />
+                  <DetailRow label="Date récolte" value={fmtDate(p.date_recolte)} />
+                  <DetailRow label="Récoltant" value={p.recoltant_nom || "—"} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Données de production</p>
-                  <DetailRow label="Poids total" value={`${p.poidsTotalKg} kg`} />
-                  <DetailRow label="Nb fruits" value={p.nbFruitsTotal} />
-                  <DetailRow label="Poids moyen fruit" value={p.poidsMoyenFruitG ? `${p.poidsMoyenFruitG} g` : "—"} />
-                  <DetailRow label="Calibre moyen" value={p.calibreMoyenMm ? `${p.calibreMoyenMm} mm` : "—"} />
-                  <DetailRow label="Qualité globale" value={p.qualiteGlobale || "—"} />
-                  <DetailRow label="Taux déclassement" value={p.tauxDeclassementPct != null ? `${p.tauxDeclassementPct}%` : "—"} />
-                  <DetailRow label="Niveau alerte" value={<NiveauBadge niveau={p.niveauAlerte} />} />
+                  <DetailRow label="Poids total" value={`${p.poids_total_kg} kg`} />
+                  <DetailRow label="Nb fruits" value={p.nb_fruits_total} />
+                  <DetailRow label="Poids moyen fruit" value={p.poids_moyen_fruit_g ? `${p.poids_moyen_fruit_g} g` : "—"} />
+                  <DetailRow label="Calibre moyen" value={p.calibre_moyen_mm ? `${p.calibre_moyen_mm} mm` : "—"} />
+                  <DetailRow label="Qualité globale" value={p.qualite_globale || "—"} />
+                  <DetailRow label="Taux déclassement" value={p.taux_declassement_pct != null ? `${p.taux_declassement_pct}%` : "—"} />
+                  <DetailRow label="Niveau alerte" value={<NiveauBadge niveau={(p as any).niveau_alerte} />} />
                 </div>
                 {p.observations && (
                   <>
@@ -604,20 +620,20 @@ export default function Validation() {
                     </div>
                   </>
                 )}
-                {p.photoUrl && (
+                {p.photo_url && (
                   <>
                     <Separator />
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Photo</p>
-                      <img src={p.photoUrl} alt={p.photoLegende || "Photo production"} className="rounded-lg max-h-48 object-cover" />
-                      {p.photoLegende && <p className="text-xs text-muted-foreground mt-1">{p.photoLegende}</p>}
+                      <img src={p.photo_url} alt={p.photo_legende || "Photo production"} className="rounded-lg max-h-48 object-cover" />
+                      {p.photo_legende && <p className="text-xs text-muted-foreground mt-1">{p.photo_legende}</p>}
                     </div>
                   </>
                 )}
                 {/* ═══ CALIBRE SECTION ═══ */}
                 {(() => {
-                  const code = p.variete?.codeVariete;
-                  const pg = p.porteGreffe?.codePg;
+                  const code = (p.varietes as any)?.code_variete;
+                  const pg = (p.porte_greffes as any)?.code_pg;
                   const calType = code ? getCalibreType(code) : null;
                   const entries = getCalibreEntries(calType);
                   const hasData = entries.some(e => (p as any)[e.dbColumn] > 0);
@@ -668,38 +684,38 @@ export default function Validation() {
               <div className="space-y-3">
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Identification</p>
-                  <DetailRow label="Domaine" value={a.domaine?.nom} />
-                  <DetailRow label="Campagne" value={a.campagne?.codeCampagne} />
-                  <DetailRow label="Date analyse" value={fmtDate(a.dateAnalyse)} />
-                  <DetailRow label="Variété" value={`${a.variete?.codeVariete} ${a.variete?.nomCommercial ? `(${a.variete.nomCommercial})` : ""}`} />
-                  <DetailRow label="Porte-greffe" value={`${a.porteGreffe?.codePg} — ${a.porteGreffe?.nomPg || ""}`} />
-                  <DetailRow label="Technicien" value={a.technicienNom} />
+                  <DetailRow label="Domaine" value={a.domaines?.nom} />
+                  <DetailRow label="Campagne" value={a.campagnes?.code_campagne} />
+                  <DetailRow label="Date analyse" value={fmtDate(a.date_analyse)} />
+                  <DetailRow label="Variété" value={`${a.varietes?.code_variete} ${a.varietes?.nom_commercial ? `(${a.varietes.nom_commercial})` : ""}`} />
+                  <DetailRow label="Porte-greffe" value={`${a.porte_greffes?.code_pg} — ${a.porte_greffes?.nom_pg || ""}`} />
+                  <DetailRow label="Technicien" value={a.technicien_nom} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Analyse physico-chimique</p>
-                  <DetailRow label="Nb fruits échantillon" value={a.nbFruitsEchantillon} />
-                  <DetailRow label="Brix" value={`${a.brixDegres}°`} />
-                  <DetailRow label="Acidité" value={`${a.aciditeGl} g/L`} />
-                  <DetailRow label="Ratio E/A" value={<EaBadgeInline value={a.ratioEa} />} />
-                  <DetailRow label="% Jus" value={a.pctJus != null ? `${a.pctJus}%` : "—"} />
+                  <DetailRow label="Nb fruits échantillon" value={a.nb_fruits_echantillon} />
+                  <DetailRow label="Brix" value={`${a.brix_degres}°`} />
+                  <DetailRow label="Acidité" value={`${a.acidite_gl} g/L`} />
+                  <DetailRow label="Ratio E/A" value={<EaBadgeInline value={a.ratio_ea} />} />
+                  <DetailRow label="% Jus" value={a.pct_jus != null ? `${a.pct_jus}%` : "—"} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Fermeté & Pépins</p>
-                  <DetailRow label="Fermeté fruit" value={a.moyenneFermeteFruitKgCm2 != null ? `${a.moyenneFermeteFruitKgCm2} kg/cm²` : "—"} />
-                  <DetailRow label="Pépins moy/fruit" value={a.moyennePepinsParFruit?.toFixed(1) ?? "—"} />
+                  <DetailRow label="Fermeté fruit" value={a.moyenne_fermete_fruit_kg_cm2 != null ? `${a.moyenne_fermete_fruit_kg_cm2} kg/cm²` : "—"} />
+                  <DetailRow label="Pépins moy/fruit" value={a.moyenne_pepins_par_fruit?.toFixed(1) ?? "—"} />
                 </div>
                 <Separator />
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Granulation & Alertes</p>
-                  <DetailRow label="Granulation légère" value={a.granulationLegere || "—"} />
-                  <DetailRow label="Granulation sévère" value={a.granulationSevere || "—"} />
+                  <DetailRow label="Granulation légère" value={a.granulation_legere || "—"} />
+                  <DetailRow label="Granulation sévère" value={a.granulation_severe || "—"} />
                   <div className="flex gap-2 flex-wrap mt-2">
-                    {a.maturiteOptimale && <Badge className="bg-success/20 text-success text-xs">✅ Maturité optimale</Badge>}
-                    {a.alerteEaFaible && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />E/A faible</Badge>}
-                    {a.alerteBrixHorsNorme && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Brix hors norme</Badge>}
-                    {a.alerteGranulationSevere && <Badge className="bg-warning/20 text-warning text-xs">Granulation sévère</Badge>}
+                    {a.maturite_optimale && <Badge className="bg-success/20 text-success text-xs">✅ Maturité optimale</Badge>}
+                    {a.alerte_ea_faible && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />E/A faible</Badge>}
+                    {a.alerte_brix_hors_norme && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Brix hors norme</Badge>}
+                    {a.alerte_granulation_severe && <Badge className="bg-warning/20 text-warning text-xs">Granulation sévère</Badge>}
                   </div>
                 </div>
                 {a.observations && (
@@ -711,12 +727,12 @@ export default function Validation() {
                     </div>
                   </>
                 )}
-                {a.photoFruitsCoupesUrl && (
+                {a.photo_fruits_coupes_url && (
                   <>
                     <Separator />
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Photo fruits coupés</p>
-                      <img src={a.photoFruitsCoupesUrl} alt={a.photoLegende || "Photo"} className="rounded-lg max-h-48 object-cover" />
+                      <img src={a.photo_fruits_coupes_url} alt={a.photo_legende || "Photo"} className="rounded-lg max-h-48 object-cover" />
                     </div>
                   </>
                 )}

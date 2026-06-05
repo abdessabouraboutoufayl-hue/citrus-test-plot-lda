@@ -1,61 +1,68 @@
 import { useState } from "react";
-import { refApi, phenologieApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Badge } from "@/components/ui/badge";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Flower2, CalendarDays, Clock, TrendingDown, AlertTriangle } from "lucide-react";
 
 export default function PhenologieDashboard() {
   const [selectedCampagne, setSelectedCampagne] = useState<string>("");
 
-  const { data: campagnes = [] } = useQuery({
+  const { data: campagnes } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: () => refApi.campagnes(),
+    queryFn: async () => {
+      const { data } = await supabase.from("campagnes").select("*").order("date_debut", { ascending: false });
+      return data || [];
+    },
   });
 
-  const { data: phenoData = [] } = useQuery({
+  const { data: phenoData } = useQuery({
     queryKey: ["phenologie-dashboard", selectedCampagne],
-    queryFn: () => phenologieApi.list(selectedCampagne || undefined),
+    queryFn: async () => {
+      let query = supabase.from("phenologie").select("*, varietes(code_variete, nom_commercial), domaines(nom)");
+      if (selectedCampagne) query = query.eq("campagne_id", Number(selectedCampagne));
+      const { data } = await query.order("variete_id");
+      return data || [];
+    },
   });
 
   const today = new Date().toISOString().split("T")[0];
-
-  const enFloraison = phenoData.filter(
-    (p: any) => p.stadeFloraisonDateDebut && (!p.stadeFloraisonDateFin || p.stadeFloraisonDateFin >= today)
+  const enFloraison = (phenoData || []).filter(
+    (p) => p.stade_floraison_date_debut && (!p.stade_floraison_date_fin || p.stade_floraison_date_fin >= today)
   ).length;
 
-  const prochainesObs = phenoData.filter(
-    (p: any) => p.prochaineObservationPrevue && p.prochaineObservationPrevue <= today
+  const prochainesObs = (phenoData || []).filter(
+    (p) => p.prochaine_observation_prevue && p.prochaine_observation_prevue <= today
   ).length;
 
-  const dureesFlo = phenoData.filter((p: any) => p.dureeFloraisonJours).map((p: any) => p.dureeFloraisonJours);
-  const moyenneDureeFlo = dureesFlo.length ? Math.round(dureesFlo.reduce((a: number, b: number) => a + b, 0) / dureesFlo.length) : 0;
+  const dureesFlo = (phenoData || []).filter((p) => p.duree_floraison_jours).map((p) => p.duree_floraison_jours!);
+  const moyenneDureeFlo = dureesFlo.length ? Math.round(dureesFlo.reduce((a, b) => a + b, 0) / dureesFlo.length) : 0;
 
-  const tauxChutes = phenoData.filter((p: any) => p.stadeChutePhysioTauxPct).map((p: any) => Number(p.stadeChutePhysioTauxPct));
-  const moyenneTauxChute = tauxChutes.length ? Math.round((tauxChutes.reduce((a: number, b: number) => a + b, 0) / tauxChutes.length) * 10) / 10 : 0;
+  const tauxChutes = (phenoData || []).filter((p) => p.stade_chute_physio_taux_pct).map((p) => Number(p.stade_chute_physio_taux_pct));
+  const moyenneTauxChute = tauxChutes.length ? Math.round((tauxChutes.reduce((a, b) => a + b, 0) / tauxChutes.length) * 10) / 10 : 0;
 
   const alertes: { type: "warning" | "error" | "info"; message: string }[] = [];
-  phenoData.forEach((p: any) => {
-    if (p.alerteFloraisonTardive) alertes.push({ type: "warning", message: `Variété ${p.variete?.codeVariete} : Floraison tardive` });
-    if (p.alerteChutePhysioIntense) alertes.push({ type: "error", message: `Variété ${p.variete?.codeVariete} : Chute physiologique intense (>50%)` });
-    if (p.prochaineObservationPrevue && p.prochaineObservationPrevue <= today && !p.notificationRappelEnvoyee) {
-      alertes.push({ type: "info", message: `Variété ${p.variete?.codeVariete} : Observation due` });
+  (phenoData || []).forEach((p) => {
+    if (p.alerte_floraison_tardive) alertes.push({ type: "warning", message: `Variété ${(p as any).varietes?.code_variete} : Floraison tardive` });
+    if (p.alerte_chute_physio_intense) alertes.push({ type: "error", message: `Variété ${(p as any).varietes?.code_variete} : Chute physiologique intense (>50%)` });
+    if (p.prochaine_observation_prevue && p.prochaine_observation_prevue <= today && !p.notification_rappel_envoyee) {
+      alertes.push({ type: "info", message: `Variété ${(p as any).varietes?.code_variete} : Observation due` });
     }
   });
 
   const stadeKeys = [
-    "stadeReposDateDebut", "stadeDebourrementDateDebut", "stadeBoutonsFlorauxDateDebut",
-    "stadePrefloraisonDateDebut", "stadeFloraisonDateDebut", "stadeChutePetalesDateDebut",
-    "stadeNouaisonDateDebut", "stadeChutePhysioDateDebut", "stadeGrossissementDateDebut",
-    "stadeVeraisonDateDebut", "stadeDebutMaturiteDate", "stadeMaturiteRecolteDate",
+    "stade_repos_date_debut", "stade_debourrement_date_debut", "stade_boutons_floraux_date_debut",
+    "stade_prefloraison_date_debut", "stade_floraison_date_debut", "stade_chute_petales_date_debut",
+    "stade_nouaison_date_debut", "stade_chute_physio_date_debut", "stade_grossissement_date_debut",
+    "stade_veraison_date_debut", "stade_debut_maturite_date", "stade_maturite_recolte_date"
   ];
 
-  const chartData = phenoData.map((p: any) => {
+  const chartData = (phenoData || []).map((p) => {
     let count = 0;
-    stadeKeys.forEach((k) => { if (p[k]) count++; });
-    return { variete: p.variete?.codeVariete || `ID ${p.varieteId}`, stades: count };
+    stadeKeys.forEach((k) => { if ((p as any)[k]) count++; });
+    return { variete: (p as any).varietes?.code_variete || `ID ${p.variete_id}`, stades: count };
   });
 
   return (
@@ -64,7 +71,7 @@ export default function PhenologieDashboard() {
         <h1 className="text-2xl font-bold text-foreground">🌸 Dashboard Phénologie</h1>
         <div className="w-48">
           <SearchableSelect
-            options={(campagnes || []).map((c: any) => ({ value: c.id.toString(), label: c.codeCampagne }))}
+            options={(campagnes || []).map((c) => ({ value: c.id.toString(), label: c.code_campagne }))}
             value={selectedCampagne}
             onValueChange={setSelectedCampagne}
             placeholder="Campagne..."
@@ -133,7 +140,7 @@ export default function PhenologieDashboard() {
         </Card>
       )}
 
-      {phenoData.length === 0 && (
+      {(phenoData || []).length === 0 && (
         <p className="text-center text-muted-foreground py-12">Aucune donnée phénologique pour cette campagne</p>
       )}
     </div>

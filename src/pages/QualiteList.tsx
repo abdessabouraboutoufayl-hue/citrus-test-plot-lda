@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { qualiteApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { PlusCircle, Search, Download, Trash2, Eye, ArrowUpDown, ChevronLeft, ChevronRight, Send, Pencil } from "lucide-react";
+import { PlusCircle, Search, Download, Upload, Trash2, Eye, ArrowUpDown, ChevronLeft, ChevronRight, Send, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -68,16 +68,24 @@ export default function QualiteList() {
   const { data: analyses = [], isLoading } = useQuery({
     queryKey: ["qualite-list", userInfo.domaineId],
     queryFn: async () => {
-      const result = await qualiteApi.list({
-        domaineId: userInfo.domaineId ?? undefined,
-        limit: 2000,
-      });
-      return result.data || [];
+      let query = supabase
+        .from("qualite_interne")
+        .select("*, varietes(code_variete, nom_commercial), porte_greffes(code_pg), domaines(nom, code), campagnes(code_campagne)")
+        .order("created_at", { ascending: false });
+      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
+        query = query.eq("domaine_id", userInfo.domaineId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => qualiteApi.delete(id),
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("qualite_interne").delete().eq("id", id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
       toast.success("Analyse supprimée");
@@ -87,7 +95,10 @@ export default function QualiteList() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: (id: number) => qualiteApi.update(id, { statutValidation: "Soumis" }),
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("qualite_interne").update({ statut_validation: "Soumis" }).eq("id", id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["qualite-list"] });
       toast.success("Analyse soumise pour validation");
@@ -97,53 +108,61 @@ export default function QualiteList() {
 
   const canDelete = (a: any) => {
     if (userInfo.role === "direction") return false;
-    return a.statutValidation === "Brouillon";
-  };
-  const canModify = (a: any) => {
-    if (userInfo.role === "direction") return false;
-    return a.statutValidation === "Brouillon" || a.statutValidation === "Rejeté";
-  };
-  const canSubmit = (a: any) => {
-    if (userInfo.role === "direction") return false;
-    return a.statutValidation === "Brouillon" || a.statutValidation === "Rejeté";
+    if (userInfo.role === "responsable_central") return a.statut_validation === "Brouillon";
+    return a.statut_validation === "Brouillon";
   };
 
+  const canModify = (a: any) => {
+    if (userInfo.role === "direction") return false;
+    if (userInfo.role === "responsable_central") return a.statut_validation === "Brouillon" || a.statut_validation === "Rejeté";
+    return a.statut_validation === "Brouillon" || a.statut_validation === "Rejeté";
+  };
+
+  const canSubmit = (a: any) => {
+    if (userInfo.role === "direction") return false;
+    return a.statut_validation === "Brouillon" || a.statut_validation === "Rejeté";
+  };
+
+  // Filtering
   const filtered = useMemo(() => {
     return analyses.filter((a: any) => {
+      // Search
       if (search) {
         const s = search.toLowerCase();
-        const match = a.variete?.codeVariete?.toLowerCase().includes(s) ||
-          a.variete?.nomCommercial?.toLowerCase().includes(s) ||
-          a.technicienNom?.toLowerCase().includes(s) ||
-          a.porteGreffe?.codePg?.toLowerCase().includes(s);
+        const match = (a.varietes as any)?.code_variete?.toLowerCase().includes(s) ||
+          (a.varietes as any)?.nom_commercial?.toLowerCase().includes(s) ||
+          a.technicien_nom?.toLowerCase().includes(s) ||
+          (a.porte_greffes as any)?.code_pg?.toLowerCase().includes(s);
         if (!match) return false;
       }
-      if (statutFilter !== "all" && a.statutValidation !== statutFilter) return false;
-      if (campagneFilter !== "all" && a.campagneId !== parseInt(campagneFilter)) return false;
+      // Statut
+      if (statutFilter !== "all" && a.statut_validation !== statutFilter) return false;
+      if (campagneFilter !== "all" && a.campagne_id !== parseInt(campagneFilter)) return false;
       if (moisFilter !== "all") {
-        const m = new Date(a.dateAnalyse).getMonth() + 1;
+        const m = new Date(a.date_analyse).getMonth() + 1;
         if (m !== parseInt(moisFilter)) return false;
       }
       return true;
     });
   }, [analyses, search, statutFilter, campagneFilter, moisFilter]);
 
+  // Sorting
   const sorted = useMemo(() => {
     const arr = [...filtered];
     const dir = sortDir === "asc" ? 1 : -1;
     arr.sort((a: any, b: any) => {
       let va: any, vb: any;
       switch (sortKey) {
-        case "code": va = a.variete?.codeVariete || ""; vb = b.variete?.codeVariete || ""; break;
-        case "pg": va = a.porteGreffe?.codePg || ""; vb = b.porteGreffe?.codePg || ""; break;
-        case "date": va = a.dateAnalyse || ""; vb = b.dateAnalyse || ""; break;
-        case "brix": va = Number(a.brixDegres) ?? 0; vb = Number(b.brixDegres) ?? 0; break;
-        case "acidite": va = Number(a.aciditeGl) ?? 0; vb = Number(b.aciditeGl) ?? 0; break;
-        case "ea": va = Number(a.ratioEa) ?? 0; vb = Number(b.ratioEa) ?? 0; break;
-        case "pct_jus": va = Number(a.pctJus) ?? 0; vb = Number(b.pctJus) ?? 0; break;
-        case "pepins": va = Number(a.moyennePepinsParFruit) ?? 0; vb = Number(b.moyennePepinsParFruit) ?? 0; break;
-        case "statut": va = a.statutValidation || ""; vb = b.statutValidation || ""; break;
-        default: va = a.dateAnalyse || ""; vb = b.dateAnalyse || "";
+        case "code": va = (a.varietes as any)?.code_variete || ""; vb = (b.varietes as any)?.code_variete || ""; break;
+        case "pg": va = (a.porte_greffes as any)?.code_pg || ""; vb = (b.porte_greffes as any)?.code_pg || ""; break;
+        case "date": va = a.date_analyse || ""; vb = b.date_analyse || ""; break;
+        case "brix": va = a.brix_degres ?? 0; vb = b.brix_degres ?? 0; break;
+        case "acidite": va = a.acidite_gl ?? 0; vb = b.acidite_gl ?? 0; break;
+        case "ea": va = a.ratio_ea ?? 0; vb = b.ratio_ea ?? 0; break;
+        case "pct_jus": va = a.pct_jus ?? 0; vb = b.pct_jus ?? 0; break;
+        case "pepins": va = a.moyenne_pepins_par_fruit ?? 0; vb = b.moyenne_pepins_par_fruit ?? 0; break;
+        case "statut": va = a.statut_validation || ""; vb = b.statut_validation || ""; break;
+        default: va = a.date_analyse || ""; vb = b.date_analyse || "";
       }
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
@@ -152,8 +171,11 @@ export default function QualiteList() {
     return arr;
   }, [filtered, sortKey, sortDir]);
 
+  // Pagination
   const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
   const paginated = sorted.slice((page - 1) * perPage, page * perPage);
+
+  // Reset page when filters change
   useMemo(() => { setPage(1); }, [search, statutFilter, campagneFilter, moisFilter]);
 
   const toggleSort = (key: SortKey) => {
@@ -172,28 +194,28 @@ export default function QualiteList() {
 
   const exportExcel = () => {
     const rows = filtered.map((a: any) => ({
-      Domaine: a.domaine?.nom,
-      "Code Variété": a.variete?.codeVariete,
-      "Nom Variété": a.variete?.nomCommercial,
-      PG: a.porteGreffe?.codePg,
-      "Date Analyse": a.dateAnalyse,
-      "Nb Échantillon": a.nbFruitsEchantillon,
-      "% Jus": Number(a.pctJus),
-      "Poids Jus (g)": Number(a.poidsJusG),
-      "Volume Jus (mL)": Number(a.volumeJusMl),
-      "Brix (°)": Number(a.brixDegres),
-      "Acidité (g/L)": Number(a.aciditeGl),
-      "NaOH (mL)": Number(a.volumeNaohMl),
-      "E/A": Number(a.ratioEa),
-      "Pépins Total": a.nbPepinsEchantillonTotal,
-      "Moy Pépins/Fruit": Number(a.moyennePepinsParFruit),
-      "Fruits avec Pépins": a.nbFruitsAvecPepins,
-      "Fermeté Peau": Number(a.moyenneFormetePeauKgCm2),
-      "Fermeté Fruit": Number(a.moyenneFermeteFruitKgCm2),
-      "Granulation Sévère": a.granulationSevere,
-      "Granulation Légère": a.granulationLegere,
-      Technicien: a.technicienNom,
-      Statut: a.statutValidation,
+      Domaine: (a.domaines as any)?.nom,
+      "Code Variété": (a.varietes as any)?.code_variete,
+      "Nom Variété": (a.varietes as any)?.nom_commercial,
+      PG: (a.porte_greffes as any)?.code_pg,
+      "Date Analyse": a.date_analyse,
+      "Nb Échantillon": a.nb_fruits_echantillon,
+      "% Jus": a.pct_jus,
+      "Poids Jus (g)": a.poids_jus_g,
+      "Volume Jus (mL)": a.volume_jus_ml,
+      "Brix (°)": a.brix_degres,
+      "Acidité (g/L)": a.acidite_gl,
+      "NaOH (mL)": a.volume_naoh_ml,
+      "E/A": a.ratio_ea,
+      "Pépins Total": a.nb_pepins_echantillon_total,
+      "Moy Pépins/Fruit": a.moyenne_pepins_par_fruit,
+      "Fruits avec Pépins": a.nb_fruits_avec_pepins,
+      "Fermeté Peau": a.moyenne_fermete_peau_kg_cm2,
+      "Fermeté Fruit": a.moyenne_fermete_fruit_kg_cm2,
+      "Granulation Sévère": a.granulation_severe,
+      "Granulation Légère": a.granulation_legere,
+      Technicien: a.technicien_nom,
+      Statut: a.statut_validation,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
@@ -209,6 +231,7 @@ export default function QualiteList() {
 
   return (
     <div className="space-y-4">
+      {/* ═══ HEADER ═══ */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Qualité Interne</h1>
         <div className="flex gap-2">
@@ -223,6 +246,7 @@ export default function QualiteList() {
         </div>
       </div>
 
+      {/* ═══ FILTERS ═══ */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -242,7 +266,7 @@ export default function QualiteList() {
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes campagnes</SelectItem>
-            {[...new Map(analyses.map((a: any) => [a.campagneId, a.campagne?.codeCampagne])).entries()]
+            {[...new Map(analyses.map((a: any) => [a.campagne_id, a.campagnes?.code_campagne])).entries()]
               .filter(([, label]) => label)
               .sort(([, a], [, b]) => (b as string).localeCompare(a as string))
               .map(([id, label]) => (
@@ -261,6 +285,7 @@ export default function QualiteList() {
         </Select>
       </div>
 
+      {/* ═══ DESKTOP TABLE ═══ */}
       <div className="hidden md:block">
         <Table>
           <TableHeader>
@@ -285,15 +310,15 @@ export default function QualiteList() {
             ) : (
               paginated.map((a: any) => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium"><Badge variant="outline">{a.variete?.codeVariete}</Badge></TableCell>
-                  <TableCell>{a.porteGreffe?.codePg}</TableCell>
-                  <TableCell>{fmtDate(a.dateAnalyse)}</TableCell>
-                  <TableCell className="text-right">{Number(a.brixDegres)?.toFixed(1)}</TableCell>
-                  <TableCell className="text-right">{Number(a.aciditeGl)?.toFixed(2)}</TableCell>
-                  <TableCell><EaBadge value={a.ratioEa != null ? Number(a.ratioEa) : null} /></TableCell>
-                  <TableCell className="text-right">{a.pctJus != null ? Math.round(Number(a.pctJus)) : "-"}</TableCell>
-                  <TableCell className="text-right">{a.moyennePepinsParFruit != null ? Number(a.moyennePepinsParFruit).toFixed(1) : "-"}</TableCell>
-                  <TableCell><Badge className={statusColors[a.statutValidation || "Brouillon"]}>{a.statutValidation}</Badge></TableCell>
+                  <TableCell className="font-medium"><Badge variant="outline">{(a.varietes as any)?.code_variete}</Badge></TableCell>
+                  <TableCell>{(a.porte_greffes as any)?.code_pg}</TableCell>
+                  <TableCell>{fmtDate(a.date_analyse)}</TableCell>
+                  <TableCell className="text-right">{a.brix_degres?.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{a.acidite_gl?.toFixed(2)}</TableCell>
+                  <TableCell><EaBadge value={a.ratio_ea} /></TableCell>
+                  <TableCell className="text-right">{a.pct_jus != null ? Math.round(a.pct_jus) : "-"}</TableCell>
+                  <TableCell className="text-right">{a.moyenne_pepins_par_fruit?.toFixed(1) ?? "-"}</TableCell>
+                  <TableCell><Badge className={statusColors[a.statut_validation || "Brouillon"]}>{a.statut_validation}</Badge></TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => setViewItem(a)} title="Consulter">
@@ -323,21 +348,22 @@ export default function QualiteList() {
         </Table>
       </div>
 
+      {/* ═══ MOBILE CARDS ═══ */}
       <div className="md:hidden space-y-3">
         {paginated.map((a: any) => (
           <Card key={a.id} className="cursor-pointer" onClick={() => setViewItem(a)}>
             <CardContent className="pt-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="font-semibold">{a.variete?.codeVariete}</p>
-                  <p className="text-xs text-muted-foreground">{a.porteGreffe?.codePg} • {fmtDate(a.dateAnalyse)}</p>
+                  <p className="font-semibold">{(a.varietes as any)?.code_variete}</p>
+                  <p className="text-xs text-muted-foreground">{(a.porte_greffes as any)?.code_pg} • {fmtDate(a.date_analyse)}</p>
                 </div>
-                <Badge className={statusColors[a.statutValidation || "Brouillon"]}>{a.statutValidation}</Badge>
+                <Badge className={statusColors[a.statut_validation || "Brouillon"]}>{a.statut_validation}</Badge>
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
-                <div><span className="text-muted-foreground">Brix</span><br />{Number(a.brixDegres)?.toFixed(1)}°</div>
-                <div><span className="text-muted-foreground">E/A</span><br /><EaBadge value={a.ratioEa != null ? Number(a.ratioEa) : null} /></div>
-                <div><span className="text-muted-foreground">% Jus</span><br />{a.pctJus != null ? Math.round(Number(a.pctJus)) : "-"}</div>
+                <div><span className="text-muted-foreground">Brix</span><br />{a.brix_degres?.toFixed(1)}°</div>
+                <div><span className="text-muted-foreground">E/A</span><br /><EaBadge value={a.ratio_ea} /></div>
+                <div><span className="text-muted-foreground">% Jus</span><br />{a.pct_jus != null ? Math.round(a.pct_jus) : "-"}</div>
               </div>
               <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                 {canSubmit(a) && (
@@ -361,6 +387,7 @@ export default function QualiteList() {
         ))}
       </div>
 
+      {/* ═══ PAGINATION FOOTER ═══ */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>{sorted.length} résultats</span>
@@ -397,7 +424,7 @@ export default function QualiteList() {
         </div>
       </div>
 
-      {/* Detail modal */}
+      {/* ═══ DETAIL MODAL ═══ */}
       <Dialog open={!!viewItem} onOpenChange={(open) => !open && setViewItem(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -405,70 +432,87 @@ export default function QualiteList() {
           </DialogHeader>
           {viewItem && (
             <div className="space-y-4">
+              {/* Identification */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Identification</h3>
-                <DetailRow label="Code variété" value={<Badge variant="outline">{viewItem.variete?.codeVariete}</Badge>} />
-                <DetailRow label="Nom commercial" value={viewItem.variete?.nomCommercial} />
-                <DetailRow label="Porte-greffe" value={viewItem.porteGreffe?.codePg} />
-                <DetailRow label="Date analyse" value={fmtDate(viewItem.dateAnalyse)} />
-                <DetailRow label="Mois" value={viewItem.moisAnalyse ? MONTHS[viewItem.moisAnalyse - 1] : "—"} />
-                <DetailRow label="Nb fruits échantillon" value={viewItem.nbFruitsEchantillon} />
+                <DetailRow label="Code variété" value={<Badge variant="outline">{(viewItem.varietes as any)?.code_variete}</Badge>} />
+                <DetailRow label="Nom commercial" value={(viewItem.varietes as any)?.nom_commercial} />
+                <DetailRow label="Porte-greffe" value={(viewItem.porte_greffes as any)?.code_pg} />
+                <DetailRow label="Date analyse" value={fmtDate(viewItem.date_analyse)} />
+                <DetailRow label="Mois" value={viewItem.mois_analyse ? MONTHS[viewItem.mois_analyse - 1] : "—"} />
+                <DetailRow label="Nb fruits échantillon" value={viewItem.nb_fruits_echantillon} />
               </div>
               <Separator />
+
+              {/* Jus */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Jus</h3>
-                <DetailRow label="% Jus" value={viewItem.pctJus != null ? `${Number(viewItem.pctJus)}%` : null} />
-                <DetailRow label="Poids jus (g)" value={Number(viewItem.poidsJusG)} />
-                <DetailRow label="Volume jus (mL)" value={Number(viewItem.volumeJusMl)} />
+                <DetailRow label="% Jus" value={viewItem.pct_jus != null ? `${viewItem.pct_jus}%` : null} />
+                <DetailRow label="Poids jus (g)" value={viewItem.poids_jus_g} />
+                <DetailRow label="Volume jus (mL)" value={viewItem.volume_jus_ml} />
               </div>
               <Separator />
+
+              {/* Chimique */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Analyse chimique</h3>
-                <DetailRow label="Brix (°)" value={Number(viewItem.brixDegres)?.toFixed(1)} />
-                <DetailRow label="Acidité (g/L)" value={Number(viewItem.aciditeGl)?.toFixed(2)} />
-                <DetailRow label="Volume NaOH (mL)" value={Number(viewItem.volumeNaohMl)} />
-                <DetailRow label="Ratio E/A" value={<EaBadge value={viewItem.ratioEa != null ? Number(viewItem.ratioEa) : null} />} />
+                <DetailRow label="Brix (°)" value={viewItem.brix_degres?.toFixed(1)} />
+                <DetailRow label="Acidité (g/L)" value={viewItem.acidite_gl?.toFixed(2)} />
+                <DetailRow label="Volume NaOH (mL)" value={viewItem.volume_naoh_ml} />
+                <DetailRow label="Ratio E/A" value={<EaBadge value={viewItem.ratio_ea} />} />
               </div>
               <Separator />
+
+              {/* Pépins */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Pépins</h3>
-                <DetailRow label="Total pépins" value={viewItem.nbPepinsEchantillonTotal} />
-                <DetailRow label="Moyenne / fruit" value={viewItem.moyennePepinsParFruit != null ? Number(viewItem.moyennePepinsParFruit).toFixed(1) : null} />
-                <DetailRow label="Fruits avec pépins" value={viewItem.nbFruitsAvecPepins} />
+                <DetailRow label="Total pépins" value={viewItem.nb_pepins_echantillon_total} />
+                <DetailRow label="Moyenne / fruit" value={viewItem.moyenne_pepins_par_fruit?.toFixed(1)} />
+                <DetailRow label="Fruits avec pépins" value={viewItem.nb_fruits_avec_pepins} />
               </div>
               <Separator />
+
+              {/* Fermeté */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Fermeté</h3>
-                <DetailRow label="Peau (kg/cm²)" value={Number(viewItem.moyenneFormetePeauKgCm2)} />
-                <DetailRow label="Fruit (kg/cm²)" value={Number(viewItem.moyenneFermeteFruitKgCm2)} />
+                <DetailRow label="Peau (kg/cm²)" value={viewItem.moyenne_fermete_peau_kg_cm2} />
+                <DetailRow label="Fruit (kg/cm²)" value={viewItem.moyenne_fermete_fruit_kg_cm2} />
               </div>
               <Separator />
+
+              {/* Granulation */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Granulation</h3>
-                <DetailRow label="Sévère" value={viewItem.granulationSevere || "—"} />
-                <DetailRow label="Légère" value={viewItem.granulationLegere || "—"} />
+                <DetailRow label="Sévère" value={viewItem.granulation_severe || "—"} />
+                <DetailRow label="Légère" value={viewItem.granulation_legere || "—"} />
               </div>
-              {viewItem.photoFruitsCoupesUrl && (
+
+              {/* Photo */}
+              {viewItem.photo_fruits_coupes_url && (
                 <>
                   <Separator />
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground mb-2">Photo fruits coupés</h3>
-                    <img src={viewItem.photoFruitsCoupesUrl} alt="Fruits coupés" className="rounded-md max-h-48 w-auto" />
-                    {viewItem.photoLegende && <p className="text-xs text-muted-foreground mt-1">{viewItem.photoLegende}</p>}
+                    <img src={viewItem.photo_fruits_coupes_url} alt="Fruits coupés" className="rounded-md max-h-48 w-auto" />
+                    {viewItem.photo_legende && <p className="text-xs text-muted-foreground mt-1">{viewItem.photo_legende}</p>}
                   </div>
                 </>
               )}
+
               <Separator />
+              {/* Infos complémentaires */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Informations</h3>
-                <DetailRow label="Technicien" value={viewItem.technicienNom} />
+                <DetailRow label="Technicien" value={viewItem.technicien_nom} />
                 <DetailRow label="Observations" value={viewItem.observations || "—"} />
               </div>
               <Separator />
+
+              {/* Workflow */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">Workflow</h3>
-                <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statutValidation || "Brouillon"]}>{viewItem.statutValidation}</Badge>} />
-                <DetailRow label="Commentaires" value={viewItem.commentairesValidation || "—"} />
+                <DetailRow label="Statut" value={<Badge className={statusColors[viewItem.statut_validation || "Brouillon"]}>{viewItem.statut_validation}</Badge>} />
+                <DetailRow label="Commentaires" value={viewItem.commentaires_validation || "—"} />
               </div>
             </div>
           )}
@@ -493,12 +537,13 @@ export default function QualiteList() {
         </DialogContent>
       </Dialog>
 
+      {/* ═══ DELETE CONFIRMATION ═══ */}
       <AlertDialog open={!!deleteItem} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
             <AlertDialogDescription>
-              Supprimer l'analyse {deleteItem?.variete?.codeVariete} - {deleteItem?.porteGreffe?.codePg} du {deleteItem ? fmtDate(deleteItem.dateAnalyse) : ""} ?
+              Supprimer l'analyse {(deleteItem?.varietes as any)?.code_variete} - {(deleteItem?.porte_greffes as any)?.code_pg} du {deleteItem ? fmtDate(deleteItem.date_analyse) : ""} ?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

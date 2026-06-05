@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { qualiteApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,24 +28,27 @@ export default function QualiteDashboard() {
   const { data: analyses = [] } = useQuery({
     queryKey: ["qualite-dashboard", userInfo.domaineId],
     queryFn: async () => {
-      const result = await qualiteApi.list({
-        statut: "Validé",
-        domaineId: userInfo.domaineId ?? undefined,
-        limit: 2000,
-      });
-      return (result.data || []) as any[];
+      let query = supabase.from("qualite_interne")
+        .select("*, varietes(code_variete, nom_commercial, type_id, types_varietes(type_nom, type_code, couleur_badge)), porte_greffes(code_pg), domaines(nom)")
+        .eq("statut_validation", "Validé");
+      if (userInfo.role === "responsable_domaine" && userInfo.domaineId) {
+        query = query.eq("domaine_id", userInfo.domaineId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []) as any[];
     },
   });
 
   // KPIs
   const now = new Date();
   const thisMonth = analyses.filter((a: any) => {
-    const d = new Date(a.dateAnalyse);
+    const d = new Date(a.date_analyse);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const avgBrix = analyses.length ? analyses.reduce((s: number, a: any) => s + (a.brixDegres || 0), 0) / analyses.length : 0;
-  const avgEA = analyses.length ? analyses.reduce((s: number, a: any) => s + (a.ratioEa || 0), 0) / analyses.length : 0;
-  const pctOptimal = analyses.length ? (analyses.filter((a: any) => a.maturiteOptimale).length / analyses.length) * 100 : 0;
+  const avgBrix = analyses.length ? analyses.reduce((s: number, a: any) => s + (a.brix_degres || 0), 0) / analyses.length : 0;
+  const avgEA = analyses.length ? analyses.reduce((s: number, a: any) => s + (a.ratio_ea || 0), 0) / analyses.length : 0;
+  const pctOptimal = analyses.length ? (analyses.filter((a: any) => a.maturite_optimale).length / analyses.length) * 100 : 0;
 
   const kpis = [
     { title: "Analyses (ce mois)", value: thisMonth.length, icon: BarChart3, color: "text-primary" },
@@ -56,17 +59,17 @@ export default function QualiteDashboard() {
 
   // E/A evolution by month (top 5 varieties)
   const varieteCounts: Record<string, number> = {};
-  analyses.forEach((a: any) => { const c = a.variete?.codeVariete; if (c) varieteCounts[c] = (varieteCounts[c] || 0) + 1; });
+  analyses.forEach((a: any) => { const c = a.varietes?.code_variete; if (c) varieteCounts[c] = (varieteCounts[c] || 0) + 1; });
   const top5 = Object.entries(varieteCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
 
   const eaByMonth: Record<number, Record<string, number[]>> = {};
   analyses.forEach((a: any) => {
-    const m = a.moisAnalyse;
-    const code = a.variete?.codeVariete;
+    const m = a.mois_analyse;
+    const code = a.varietes?.code_variete;
     if (!m || !code || !top5.includes(code)) return;
     if (!eaByMonth[m]) eaByMonth[m] = {};
     if (!eaByMonth[m][code]) eaByMonth[m][code] = [];
-    if (a.ratioEa) eaByMonth[m][code].push(a.ratioEa);
+    if (a.ratio_ea) eaByMonth[m][code].push(a.ratio_ea);
   });
   const eaLineData = Object.entries(eaByMonth).sort(([a], [b]) => Number(a) - Number(b)).map(([m, varieties]) => {
     const point: any = { mois: MONTHS[Number(m) - 1] || m };
@@ -77,36 +80,36 @@ export default function QualiteDashboard() {
   // Brix by type
   const brixByType: Record<string, { total: number; count: number; color: string }> = {};
   analyses.forEach((a: any) => {
-    const t = a.variete?.typeVariete;
+    const t = a.varietes?.types_varietes;
     if (!t) return;
-    if (!brixByType[t.typeCode]) brixByType[t.typeCode] = { total: 0, count: 0, color: t.couleurBadge || "#999" };
-    brixByType[t.typeCode].total += a.brixDegres || 0;
-    brixByType[t.typeCode].count += 1;
+    if (!brixByType[t.type_code]) brixByType[t.type_code] = { total: 0, count: 0, color: t.couleur_badge || "#999" };
+    brixByType[t.type_code].total += a.brix_degres || 0;
+    brixByType[t.type_code].count += 1;
   });
   const brixBarData = Object.entries(brixByType).map(([type, d]) => ({ type, brix: +(d.total / d.count).toFixed(2), color: d.color }));
 
   // Maturity timeline for selected variety
-  const uniqueVarietes = [...new Set(analyses.map((a: any) => a.variete?.codeVariete).filter(Boolean))];
+  const uniqueVarietes = [...new Set(analyses.map((a: any) => a.varietes?.code_variete).filter(Boolean))];
   const timelineData = analyses
-    .filter((a: any) => selectedVariete === "all" || a.variete?.codeVariete === selectedVariete)
-    .sort((a: any, b: any) => new Date(a.dateAnalyse).getTime() - new Date(b.dateAnalyse).getTime())
+    .filter((a: any) => selectedVariete === "all" || a.varietes?.code_variete === selectedVariete)
+    .sort((a: any, b: any) => new Date(a.date_analyse).getTime() - new Date(b.date_analyse).getTime())
     .map((a: any) => ({
-      date: new Date(a.dateAnalyse).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
-      brix: a.brixDegres,
-      acidite: a.aciditeGl,
-      ea: a.ratioEa,
+      date: new Date(a.date_analyse).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+      brix: a.brix_degres,
+      acidite: a.acidite_gl,
+      ea: a.ratio_ea,
     }));
 
   // Top 10 varieties by E/A
   const varieteStats: Record<string, { brix: number[]; acidite: number[]; ea: number[]; jus: number[]; type: string }> = {};
   analyses.forEach((a: any) => {
-    const code = a.variete?.codeVariete;
+    const code = a.varietes?.code_variete;
     if (!code) return;
-    if (!varieteStats[code]) varieteStats[code] = { brix: [], acidite: [], ea: [], jus: [], type: a.variete?.typeVariete?.typeCode || "" };
-    if (a.brixDegres) varieteStats[code].brix.push(a.brixDegres);
-    if (a.aciditeGl) varieteStats[code].acidite.push(a.aciditeGl);
-    if (a.ratioEa) varieteStats[code].ea.push(a.ratioEa);
-    if (a.pctJus) varieteStats[code].jus.push(a.pctJus);
+    if (!varieteStats[code]) varieteStats[code] = { brix: [], acidite: [], ea: [], jus: [], type: a.varietes?.types_varietes?.type_code || "" };
+    if (a.brix_degres) varieteStats[code].brix.push(a.brix_degres);
+    if (a.acidite_gl) varieteStats[code].acidite.push(a.acidite_gl);
+    if (a.ratio_ea) varieteStats[code].ea.push(a.ratio_ea);
+    if (a.pct_jus) varieteStats[code].jus.push(a.pct_jus);
   });
   const avg = (arr: number[]) => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
   const topVarietes = Object.entries(varieteStats)

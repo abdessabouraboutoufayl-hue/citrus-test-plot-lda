@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminApi, refApi } from "@/services/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,241 +24,122 @@ const roleLabels: Record<string, string> = {
   direction: "Direction",
 };
 
-// ─── Utilisateurs Tab ────────────────────────────────────────────────────────
-function UtilisateursGestionTab() {
+// ─── Profils de permissions Tab ───
+function ProfilsPermissionsTab() {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>("");
-  const [selectedDomaineId, setSelectedDomaineId] = useState<string>("");
-
-  const { data: allUsers = [], isLoading } = useQuery({
-    queryKey: ["admin-all-users"],
-    queryFn: () => adminApi.listUsers(),
-  });
-
-  const { data: domaines = [] } = useQuery({
-    queryKey: ["domaines-list"],
-    queryFn: () => refApi.domaines(),
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: async () => {
-      if (!editUserId || !selectedRole) return;
-      await adminApi.updateUser(editUserId, {
-        role: selectedRole,
-        domaineId: selectedDomaineId || null,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Droits mis à jour");
-      setEditOpen(false);
-      setEditUserId(null);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: (userId: string) => adminApi.deleteUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Utilisateur supprimé");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const openAssign = (user: any) => {
-    setEditUserId(user.id);
-    const topRole = user.userRoles?.[0];
-    setSelectedRole(topRole?.role || "");
-    setSelectedDomaineId(user.domaine?.id || "");
-    setEditOpen(true);
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Utilisateurs & Profils d'accès</CardTitle>
-        <CardDescription>Assignez un rôle à chaque utilisateur</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Nom</TableHead>
-              <TableHead>Rôle</TableHead>
-              <TableHead>Domaine</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                  Chargement...
-                </TableCell>
-              </TableRow>
-            ) : (
-              allUsers.map((u: any) => {
-                const topRole = u.userRoles?.[0];
-                return (
-                  <TableRow key={u.id} className={!topRole ? "bg-destructive/5" : ""}>
-                    <TableCell className="text-sm">{u.email || "—"}</TableCell>
-                    <TableCell className="font-medium">{u.nomComplet || "—"}</TableCell>
-                    <TableCell>
-                      {topRole ? (
-                        <Badge variant="outline">{roleLabels[topRole.role] || topRole.role}</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">
-                          Aucun rôle
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{u.domaine?.nom || "—"}</TableCell>
-                    <TableCell className="flex gap-1">
-                      <Button
-                        variant={topRole ? "ghost" : "default"}
-                        size="sm"
-                        onClick={() => openAssign(u)}
-                      >
-                        <Shield className="h-4 w-4 mr-1" />
-                        {topRole ? "Modifier" : "Activer"}
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Cette action est irréversible. L'utilisateur{" "}
-                              <strong>{u.email}</strong> sera définitivement supprimé.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteUserMutation.mutate(u.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Supprimer
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-
-      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditUserId(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Configurer l'accès utilisateur</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Rôle</Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un rôle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
-                  <SelectItem value="responsable_central">Responsable Central</SelectItem>
-                  <SelectItem value="direction">Direction</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedRole === "responsable_domaine" && (
-              <div>
-                <Label>Domaine</Label>
-                <Select value={selectedDomaineId} onValueChange={setSelectedDomaineId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un domaine" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {domaines.map((d: any) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.nom}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => updateUserMutation.mutate()}
-              disabled={!selectedRole || updateUserMutation.isPending}
-            >
-              Enregistrer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
-// ─── Permissions Tab ──────────────────────────────────────────────────────────
-function PermissionsTab() {
-  const queryClient = useQueryClient();
-  const [editOpen, setEditOpen] = useState(false);
-  const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [editUserName, setEditUserName] = useState<string>("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState({ nom: "", description: "" });
   const [selectedPermissions, setSelectedPermissions] = useState<Record<string, boolean>>({});
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["admin-all-users"],
-    queryFn: () => adminApi.listUsers(),
+  const { data: profiles = [], isLoading } = useQuery({
+    queryKey: ["permission-profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("permission_profiles").select("*").order("nom");
+      if (error) throw error;
+      return data;
+    },
   });
 
-  const openEdit = async (user: any) => {
-    setEditUserId(user.id);
-    setEditUserName(user.nomComplet || user.email);
-    const perms = await adminApi.getPermissions(user.id);
-    const map: Record<string, boolean> = {};
-    perms.forEach((p: any) => { map[p.menuKey] = p.canView; });
-    setSelectedPermissions(map);
-    setEditOpen(true);
-  };
+  const { data: allPermissions = [] } = useQuery({
+    queryKey: ["all-profile-permissions"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profile_permissions").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  const saveMutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async () => {
-      if (!editUserId) return;
-      const permissions = APP_MODULES.flatMap((mod) =>
-        mod.subMenus.map((sub) => ({
-          menuKey: `${mod.key}__${sub.key}`,
-          canView: !!selectedPermissions[`${mod.key}__${sub.key}`],
-          canCreate: !!selectedPermissions[`${mod.key}__${sub.key}`],
-          canEdit: !!selectedPermissions[`${mod.key}__${sub.key}`],
-          canDelete: false,
-        }))
-      );
-      await adminApi.setPermissions(editUserId, permissions);
+      const { data, error } = await supabase.from("permission_profiles").insert({
+        nom: form.nom.trim(),
+        description: form.description.trim() || null,
+      }).select().single();
+      if (error) throw error;
+      // Insert permissions
+      const perms = Object.entries(selectedPermissions)
+        .filter(([, v]) => v)
+        .map(([key]) => {
+          const parts = key.split("__");
+          return { profile_id: data.id, module_key: parts[0], submenu_key: parts[1], can_access: true };
+        });
+      if (perms.length > 0) {
+        const { error: permError } = await supabase.from("profile_permissions").insert(perms);
+        if (permError) throw permError;
+      }
     },
     onSuccess: () => {
-      toast.success("Permissions mises à jour");
-      setEditOpen(false);
-      setEditUserId(null);
+      queryClient.invalidateQueries({ queryKey: ["permission-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["all-profile-permissions"] });
+      toast.success("Profil créé");
+      setOpen(false);
+      setForm({ nom: "", description: "" });
+      setSelectedPermissions({});
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("permission_profiles").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["permission-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["all-profile-permissions"] });
+      toast.success("Profil supprimé");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openEdit = async (profile: any) => {
+    setEditId(profile.id);
+    setForm({ nom: profile.nom, description: profile.description || "" });
+    const permsForProfile = allPermissions.filter((p: any) => p.profile_id === profile.id && p.can_access);
+    const permsMap: Record<string, boolean> = {};
+    permsForProfile.forEach((p: any) => {
+      permsMap[`${p.module_key}__${p.submenu_key}`] = true;
+    });
+    setSelectedPermissions(permsMap);
+    setEditOpen(true);
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editId) return;
+      const { error } = await supabase.from("permission_profiles").update({
+        nom: form.nom.trim(),
+        description: form.description.trim() || null,
+      }).eq("id", editId);
+      if (error) throw error;
+      // Replace permissions
+      await supabase.from("profile_permissions").delete().eq("profile_id", editId);
+      const perms = Object.entries(selectedPermissions)
+        .filter(([, v]) => v)
+        .map(([key]) => {
+          const parts = key.split("__");
+          return { profile_id: editId, module_key: parts[0], submenu_key: parts[1], can_access: true };
+        });
+      if (perms.length > 0) {
+        const { error: permError } = await supabase.from("profile_permissions").insert(perms);
+        if (permError) throw permError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["permission-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["all-profile-permissions"] });
+      toast.success("Profil mis à jour");
+      setEditOpen(false);
+      setEditId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const getProfilePermCount = (profileId: string) => {
+    return allPermissions.filter((p: any) => p.profile_id === profileId && p.can_access).length;
+  };
 
   const PermissionsCheckboxes = () => (
     <div className="space-y-4 max-h-[400px] overflow-y-auto">
@@ -273,19 +154,13 @@ function PermissionsTab() {
               size="sm"
               className="h-6 text-xs"
               onClick={() => {
-                const allChecked = mod.subMenus.every(
-                  (s) => selectedPermissions[`${mod.key}__${s.key}`]
-                );
+                const allChecked = mod.subMenus.every(s => selectedPermissions[`${mod.key}__${s.key}`]);
                 const newPerms = { ...selectedPermissions };
-                mod.subMenus.forEach((s) => {
-                  newPerms[`${mod.key}__${s.key}`] = !allChecked;
-                });
+                mod.subMenus.forEach(s => { newPerms[`${mod.key}__${s.key}`] = !allChecked; });
                 setSelectedPermissions(newPerms);
               }}
             >
-              {mod.subMenus.every((s) => selectedPermissions[`${mod.key}__${s.key}`])
-                ? "Tout décocher"
-                : "Tout cocher"}
+              {mod.subMenus.every(s => selectedPermissions[`${mod.key}__${s.key}`]) ? "Tout décocher" : "Tout cocher"}
             </Button>
           </div>
           <div className="ml-6 space-y-1">
@@ -296,13 +171,9 @@ function PermissionsTab() {
                   <Checkbox
                     id={permKey}
                     checked={!!selectedPermissions[permKey]}
-                    onCheckedChange={(checked) =>
-                      setSelectedPermissions((prev) => ({ ...prev, [permKey]: !!checked }))
-                    }
+                    onCheckedChange={(checked) => setSelectedPermissions(prev => ({ ...prev, [permKey]: !!checked }))}
                   />
-                  <label htmlFor={permKey} className="text-sm cursor-pointer">
-                    {sub.label}
-                  </label>
+                  <label htmlFor={permKey} className="text-sm cursor-pointer">{sub.label}</label>
                 </div>
               );
             })}
@@ -314,54 +185,73 @@ function PermissionsTab() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Permissions par utilisateur</CardTitle>
-        <CardDescription>Définissez l'accès aux sous-menus pour chaque utilisateur</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg">Profils de permissions</CardTitle>
+          <CardDescription>Définissez des profils d'accès personnalisés par sous-menu</CardDescription>
+        </div>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ nom: "", description: "" }); setSelectedPermissions({}); } }}>
+          <DialogTrigger asChild>
+            <Button size="sm"><PlusCircle className="h-4 w-4 mr-1" /> Nouveau profil</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Nouveau profil de permissions</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Nom du profil</Label><Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Ex: Technicien terrain" /></div>
+              <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Accès limité aux saisies" /></div>
+              <div>
+                <Label className="mb-2 block">Permissions d'accès</Label>
+                <PermissionsCheckboxes />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => createMutation.mutate()} disabled={!form.nom || createMutation.isPending}>Créer</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Utilisateur</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Rôle</TableHead>
+              <TableHead>Nom</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Permissions</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {allUsers.map((u: any) => {
-              const topRole = u.userRoles?.[0];
-              return (
-                <TableRow key={u.id}>
-                  <TableCell className="font-medium">{u.nomComplet || "—"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
-                  <TableCell>
-                    {topRole && (
-                      <Badge variant="outline">{roleLabels[topRole.role] || topRole.role}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
-                      <Pencil className="h-4 w-4 mr-1" /> Configurer
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {isLoading ? (
+              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
+            ) : profiles.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Aucun profil créé</TableCell></TableRow>
+            ) : profiles.map((p: any) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-medium">{p.nom}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{p.description || "—"}</TableCell>
+                <TableCell><Badge variant="secondary">{getProfilePermCount(p.id)} accès</Badge></TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </CardContent>
-
-      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditUserId(null); }}>
+      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditId(null); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Permissions — {editUserName}</DialogTitle>
-          </DialogHeader>
-          <PermissionsCheckboxes />
+          <DialogHeader><DialogTitle>Modifier le profil</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Nom du profil</Label><Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} /></div>
+            <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+            <div>
+              <Label className="mb-2 block">Permissions d'accès</Label>
+              <PermissionsCheckboxes />
+            </div>
+          </div>
           <DialogFooter>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-              Enregistrer
-            </Button>
+            <Button onClick={() => updateMutation.mutate()} disabled={!form.nom || updateMutation.isPending}>Enregistrer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -369,7 +259,251 @@ function PermissionsTab() {
   );
 }
 
-// ─── Page principale ──────────────────────────────────────────────────────────
+// ─── Utilisateurs Tab ───
+function UtilisateursGestionTab() {
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [selectedDomaineId, setSelectedDomaineId] = useState<string>("");
+
+  // Fetch all profiles (users) and their roles
+  const { data: allUsers = [], isLoading } = useQuery({
+    queryKey: ["admin-all-users"],
+    queryFn: async () => {
+      // Get all profiles
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, email, nom_complet")
+        .order("email");
+      if (pErr) throw pErr;
+
+      // Get all user_roles
+      const { data: roles, error: rErr } = await supabase
+        .from("user_roles")
+        .select("*, domaines:domaine_id(nom)");
+      if (rErr) throw rErr;
+
+      // Merge: each profile with their role (if any)
+      return (profiles || []).map((p: any) => {
+        const userRole = (roles || []).find((r: any) => r.user_id === p.id);
+        return {
+          ...p,
+          role: userRole?.role || null,
+          domaine_id: userRole?.domaine_id || null,
+          domaine_nom: (userRole?.domaines as any)?.nom || null,
+          permission_profile_id: userRole?.permission_profile_id || null,
+          has_role: !!userRole,
+          role_id: userRole?.id || null,
+        };
+      });
+    },
+  });
+
+  const { data: permProfiles = [] } = useQuery({
+    queryKey: ["permission-profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("permission_profiles").select("*").order("nom");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: domaines = [] } = useQuery({
+    queryKey: ["domaines-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("domaines").select("id, nom").order("nom");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const assignRoleMutation = useMutation({
+    mutationFn: async () => {
+      if (!editUserId || !selectedRole) return;
+      const currentUser = allUsers.find((u: any) => u.id === editUserId);
+      
+      const roleData: any = {
+        role: selectedRole,
+        permission_profile_id: selectedProfileId && selectedProfileId !== "none" ? selectedProfileId : null,
+        domaine_id: selectedDomaineId ? parseInt(selectedDomaineId) : null,
+      };
+
+      if (currentUser?.has_role) {
+        // Update existing role
+        const { error } = await supabase.from("user_roles").update(roleData).eq("user_id", editUserId);
+        if (error) throw error;
+      } else {
+        // Insert new role
+        const { error } = await supabase.from("user_roles").insert({ ...roleData, user_id: editUserId });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Droits mis à jour");
+      setEditOpen(false);
+      setEditUserId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Utilisateur supprimé");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openAssign = (user: any) => {
+    setEditUserId(user.id);
+    setSelectedRole(user.role || "");
+    setSelectedProfileId(user.permission_profile_id || "");
+    setSelectedDomaineId(user.domaine_id?.toString() || "");
+    setEditOpen(true);
+  };
+
+  const getProfileName = (profileId: string | null) => {
+    if (!profileId) return null;
+    const p = permProfiles.find((pp: any) => pp.id === profileId);
+    return p ? (p as any).nom : null;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Utilisateurs & Profils d'accès</CardTitle>
+        <CardDescription>Assignez un rôle et un profil de permissions à chaque utilisateur</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Nom</TableHead>
+              <TableHead>Rôle</TableHead>
+              <TableHead>Domaine</TableHead>
+              <TableHead>Profil d'accès</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Chargement...</TableCell></TableRow>
+            ) : allUsers.map((u: any) => (
+              <TableRow key={u.id} className={!u.has_role ? "bg-destructive/5" : ""}>
+                <TableCell className="text-sm">{u.email || "—"}</TableCell>
+                <TableCell className="font-medium">{u.nom_complet || "—"}</TableCell>
+                <TableCell>
+                  {u.role ? (
+                    <Badge variant="outline">{roleLabels[u.role] || u.role}</Badge>
+                  ) : (
+                    <Badge variant="destructive" className="text-xs">Aucun rôle</Badge>
+                  )}
+                </TableCell>
+                <TableCell>{u.domaine_nom || "—"}</TableCell>
+                <TableCell>
+                  {!u.has_role ? (
+                    <span className="text-xs text-destructive font-medium">Sans accès</span>
+                  ) : u.permission_profile_id ? (
+                    <Badge variant="secondary">{getProfileName(u.permission_profile_id) || "—"}</Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Accès complet</span>
+                  )}
+                </TableCell>
+                <TableCell className="flex gap-1">
+                  <Button variant={u.has_role ? "ghost" : "default"} size="sm" onClick={() => openAssign(u)}>
+                    <Shield className="h-4 w-4 mr-1" /> {u.has_role ? "Modifier" : "Activer"}
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. L'utilisateur <strong>{u.email}</strong> sera définitivement supprimé avec tous ses droits d'accès.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteUserMutation.mutate(u.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditUserId(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Configurer l'accès utilisateur</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Rôle</Label>
+              <Select value={selectedRole} onValueChange={setSelectedRole}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="responsable_domaine">Responsable Domaine</SelectItem>
+                  <SelectItem value="responsable_central">Responsable Central</SelectItem>
+                  <SelectItem value="direction">Direction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedRole === "responsable_domaine" && (
+              <div>
+                <Label>Domaine</Label>
+                <Select value={selectedDomaineId} onValueChange={setSelectedDomaineId}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un domaine" /></SelectTrigger>
+                  <SelectContent>
+                    {domaines.map((d: any) => (
+                      <SelectItem key={d.id} value={d.id.toString()}>{d.nom}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div>
+              <Label>Profil de permissions</Label>
+              <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+                <SelectTrigger><SelectValue placeholder="Accès complet (par défaut)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Accès complet (par défaut)</SelectItem>
+                  {permProfiles.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>{(p as any).nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => assignRoleMutation.mutate()} disabled={!selectedRole || assignRoleMutation.isPending}>Enregistrer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 export default function GestionUtilisateurs() {
   const { userInfo } = useAuth();
 
@@ -385,19 +519,11 @@ export default function GestionUtilisateurs() {
       </div>
       <Tabs defaultValue="utilisateurs">
         <TabsList>
-          <TabsTrigger value="utilisateurs">
-            <UserCheck className="h-4 w-4 mr-1" /> Utilisateurs
-          </TabsTrigger>
-          <TabsTrigger value="permissions">
-            <Shield className="h-4 w-4 mr-1" /> Permissions
-          </TabsTrigger>
+          <TabsTrigger value="utilisateurs"><UserCheck className="h-4 w-4 mr-1" /> Utilisateurs</TabsTrigger>
+          <TabsTrigger value="profils"><Shield className="h-4 w-4 mr-1" /> Profils de permissions</TabsTrigger>
         </TabsList>
-        <TabsContent value="utilisateurs">
-          <UtilisateursGestionTab />
-        </TabsContent>
-        <TabsContent value="permissions">
-          <PermissionsTab />
-        </TabsContent>
+        <TabsContent value="utilisateurs"><UtilisateursGestionTab /></TabsContent>
+        <TabsContent value="profils"><ProfilsPermissionsTab /></TabsContent>
       </Tabs>
     </div>
   );

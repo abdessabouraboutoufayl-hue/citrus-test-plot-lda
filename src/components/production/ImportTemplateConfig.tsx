@@ -19,14 +19,14 @@ import { EXCEL_CALIBRE_COLUMNS, NB_ECHANTILLON } from "@/lib/calibre-config";
 
 interface Variete {
   id: number;
-  codeVariete: string;
-  nomCommercial: string | null;
+  code_variete: string;
+  nom_commercial: string | null;
 }
 
 interface PorteGreffe {
   id: number;
-  codePg: string;
-  nomPg: string;
+  code_pg: string;
+  nom_pg: string;
 }
 
 interface Domaine {
@@ -37,7 +37,7 @@ interface Domaine {
 
 interface Campagne {
   id: number;
-  codeCampagne: string;
+  code_campagne: string;
 }
 
 interface Props {
@@ -142,11 +142,11 @@ export default function ImportTemplateConfig({
     combos.forEach(({ variete, pg }) => {
       for (let a = 1; a <= nbArbresPerCombo; a++) {
         const row: Record<string, any> = {
-          Campagne: campagne?.codeCampagne || "",
+          Campagne: campagne?.code_campagne || "",
           Date: dateRecolte,
           Domaine: domaine?.code || "",
-          Code: variete.codeVariete,
-          PG: pg.codePg,
+          Code: variete.code_variete,
+          PG: pg.code_pg,
           Ligne: "",
           Position: "",
           Poids_kg: "",
@@ -269,7 +269,7 @@ export default function ImportTemplateConfig({
                 <div className="space-y-1.5">
                   <Label>Campagne</Label>
                   <SearchableSelect
-                    options={campagnes.map(c => ({ value: c.id.toString(), label: c.codeCampagne }))}
+                    options={campagnes.map(c => ({ value: c.id.toString(), label: c.code_campagne }))}
                     value={campagneId?.toString()}
                     onValueChange={v => setCampagneId(Number(v))}
                     placeholder="Sélectionner campagne"
@@ -297,9 +297,9 @@ export default function ImportTemplateConfig({
                           checked={isSelected}
                           onCheckedChange={() => toggleVariete(v.id)}
                         />
-                        <span className="text-sm font-medium">{v.codeVariete}</span>
-                        {v.nomCommercial && (
-                          <span className="text-xs text-muted-foreground">- {v.nomCommercial}</span>
+                        <span className="text-sm font-medium">{v.code_variete}</span>
+                        {v.nom_commercial && (
+                          <span className="text-xs text-muted-foreground">- {v.nom_commercial}</span>
                         )}
                       </div>
                       {isSelected && (
@@ -311,7 +311,7 @@ export default function ImportTemplateConfig({
                                 onCheckedChange={() => togglePG(v.id, pg.id)}
                                 className="h-3.5 w-3.5"
                               />
-                              {pg.codePg}
+                              {pg.code_pg}
                             </label>
                           ))}
                         </div>
