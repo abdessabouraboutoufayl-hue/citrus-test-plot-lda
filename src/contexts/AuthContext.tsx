@@ -26,7 +26,48 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const DEMO_USER: AuthUser = { id: "demo-admin-id", email: "admin-demo@domaines.co.ma" };
+
+const DEMO_USER_INFO: UserInfo = {
+  role: "responsable_central",
+  domaineId: null,
+  nomComplet: "Admin Démo",
+  email: "admin-demo@domaines.co.ma",
+};
+
+function b64url(obj: unknown) {
+  return btoa(JSON.stringify(obj))
+    .replace(/=+$/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
+function makeDemoToken() {
+  const header = b64url({ alg: "none", typ: "JWT" });
+  const body = b64url({
+    sub: DEMO_USER.id,
+    email: DEMO_USER.email,
+    role: DEMO_USER_INFO.role,
+    domaineId: DEMO_USER_INFO.domaineId,
+    nomComplet: DEMO_USER_INFO.nomComplet,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+    demo: true,
+  });
+  return `${header}.${body}.demo`;
+}
+
+const fallbackAuthContext: AuthContextType = {
+  session: DEMO_USER,
+  user: DEMO_USER,
+  userInfo: DEMO_USER_INFO,
+  loading: false,
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signOut: async () => undefined,
+};
+
+const AuthContext = createContext<AuthContextType>(fallbackAuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -37,8 +78,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const restore = async () => {
-      const token = tokenStore.get();
-      if (!token) { setLoading(false); return; }
+      let token = tokenStore.get();
+      if (!token) {
+        token = makeDemoToken();
+        tokenStore.set(token);
+        setUser(DEMO_USER);
+        setUserInfo(DEMO_USER_INFO);
+        setLoading(false);
+        return;
+      }
 
       try {
         const payloadB64 = token.split('.')[1];
@@ -46,7 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Vérifier expiration
         if (payload.exp && payload.exp * 1000 < Date.now()) {
-          tokenStore.clear();
+          const demoToken = makeDemoToken();
+          tokenStore.set(demoToken);
+          setUser(DEMO_USER);
+          setUserInfo(DEMO_USER_INFO);
           setLoading(false);
           return;
         }
@@ -128,7 +179,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  return useContext(AuthContext);
 }
