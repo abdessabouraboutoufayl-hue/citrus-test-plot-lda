@@ -117,7 +117,7 @@ export const refApi = {
 
 // ── Productions ───────────────────────────────────────────
 export const productionApi = {
-  list: (params?: { campagneId?: string; domaineId?: string; varieteId?: string; page?: number; limit?: number }) => {
+  list: (params?: { campagneId?: string; domaineId?: string; varieteId?: string; statut?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.campagneId) qs.set('campagneId', params.campagneId);
     if (params?.domaineId) qs.set('domaineId', params.domaineId);
