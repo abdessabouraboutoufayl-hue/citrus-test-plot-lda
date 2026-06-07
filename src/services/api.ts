@@ -2,6 +2,7 @@
 // Centralized API client — replaces all supabase.* calls
 // All HTTP calls go through this module.
 // ============================================================
+import { supabase } from '@/integrations/supabase/client';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -86,30 +87,53 @@ export const authApi = {
     request<{ id: string; email: string; nomComplet: string | null; domaineId: string | null }>('/api/auth/me'),
 };
 
-// ── Référentiel ───────────────────────────────────────────
+// ── Référentiel (lectures via Supabase pour le mode démo) ─
+async function sb<T>(p: PromiseLike<{ data: T | null; error: any }>): Promise<T> {
+  const { data, error } = await p;
+  if (error) throw new Error(error.message);
+  return (data ?? ([] as unknown as T));
+}
+
+const mapCampagne = (c: any) => ({ ...c, codeCampagne: c.code_campagne, dateDebut: c.date_debut, dateFin: c.date_fin });
+const mapVariete = (v: any) => ({ ...v, codeVariete: v.code_variete, nomCommercial: v.nom_commercial, typeId: v.type_id });
+const mapPg = (p: any) => ({ ...p, codePg: p.code_pg, nomPg: p.nom_pg });
+const mapType = (t: any) => ({ ...t, typeNom: t.type_nom, typeCode: t.type_code, couleurBadge: t.couleur_badge });
+const mapDomaine = (d: any) => ({ ...d, superficieHa: d.superficie_ha, superficieGeojson: d.superficie_geojson, responsableNom: d.responsable_nom });
+const mapDV = (dv: any) => ({ ...dv, varieteId: dv.variete_id, domaineId: dv.domaine_id, porteGreffeId: dv.porte_greffe_id, nbArbres: dv.nb_arbres });
+
 export const refApi = {
-  campagnes: () => request<any[]>('/api/referentiel/campagnes'),
+  campagnes: async () => (await sb<any[]>(supabase.from('campagnes').select('*').order('date_debut', { ascending: false }))).map(mapCampagne),
   createCampagne: (body: object) => request<any>('/api/referentiel/campagnes', { method: 'POST', body: JSON.stringify(body) }),
   updateCampagne: (id: number, body: object) => request<any>(`/api/referentiel/campagnes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCampagne: (id: number) => request<void>(`/api/referentiel/campagnes/${id}`, { method: 'DELETE' }),
 
-  varietes: (typeId?: string) =>
-    request<any[]>(`/api/referentiel/varietes${typeId ? `?typeId=${typeId}` : ''}`),
+  varietes: async (typeId?: string) => {
+    let q: any = supabase.from('varietes').select('*').order('code_variete');
+    if (typeId) q = q.eq('type_id', Number(typeId));
+    return (await sb<any[]>(q)).map(mapVariete);
+  },
   createVariete: (body: object) => request<any>('/api/referentiel/varietes', { method: 'POST', body: JSON.stringify(body) }),
   updateVariete: (id: number, body: object) => request<any>(`/api/referentiel/varietes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteVariete: (id: number) => request<void>(`/api/referentiel/varietes/${id}`, { method: 'DELETE' }),
 
-  porteGreffes: () => request<any[]>('/api/referentiel/porte-greffes'),
-  typesVarietes: () => request<any[]>('/api/referentiel/types-varietes'),
+  porteGreffes: async () => (await sb<any[]>(supabase.from('porte_greffes').select('*').order('code_pg'))).map(mapPg),
+  typesVarietes: async () => (await sb<any[]>(supabase.from('types_varietes').select('*'))).map(mapType),
 
-  domaines: () => request<any[]>('/api/referentiel/domaines'),
-  domaine: (id: number) => request<any>(`/api/referentiel/domaines/${id}`),
+  domaines: async () => (await sb<any[]>(supabase.from('domaines').select('*').order('nom'))).map(mapDomaine),
+  domaine: async (id: number) => {
+    const { data, error } = await supabase.from('domaines').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? mapDomaine(data) : null;
+  },
   createDomaine: (body: object) => request<any>('/api/referentiel/domaines', { method: 'POST', body: JSON.stringify(body) }),
   updateDomaine: (id: number, body: object) => request<any>(`/api/referentiel/domaines/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteDomaine: (id: number) => request<void>(`/api/referentiel/domaines/${id}`, { method: 'DELETE' }),
 
-  domaineVarietes: (domaineId?: number) =>
-    request<any[]>(`/api/referentiel/domaine-varietes${domaineId ? `?domaineId=${domaineId}` : ''}`),
+  domaineVarietes: async (domaineId?: number) => {
+    let q: any = supabase.from('domaine_varietes').select('*');
+    if (domaineId) q = q.eq('domaine_id', domaineId);
+    return (await sb<any[]>(q)).map(mapDV);
+  },
   createDomaineVariete: (body: object) => request<any>('/api/referentiel/domaine-varietes', { method: 'POST', body: JSON.stringify(body) }),
   updateDomaineVariete: (id: number, body: object) => request<any>(`/api/referentiel/domaine-varietes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteDomaineVariete: (id: number) => request<void>(`/api/referentiel/domaine-varietes/${id}`, { method: 'DELETE' }),
