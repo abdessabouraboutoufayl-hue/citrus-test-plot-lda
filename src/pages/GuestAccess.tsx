@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { authApi, tokenStore } from "@/services/api";
 import { toast } from "sonner";
 
 export default function GuestAccess() {
@@ -10,26 +10,15 @@ export default function GuestAccess() {
   useEffect(() => {
     (async () => {
       try {
-        // Sign out any existing session to avoid mixing accounts
-        await supabase.auth.signOut();
-
-        setStatus("Création / vérification du compte invité...");
-        const { data, error } = await supabase.functions.invoke("guest-access");
-        if (error) throw error;
-        if (!data?.email || !data?.password) throw new Error("Réponse invalide du serveur");
-
-        setStatus("Connexion automatique...");
-        const { error: signInErr } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password,
-        });
-        if (signInErr) throw signInErr;
-
-        navigate("/dashboard", { replace: true });
+        setStatus("Connexion du compte invité...");
+        const { token } = await authApi.guestLogin();
+        tokenStore.set(token);
+        // Full page reload so AuthProvider re-reads the JWT from localStorage
+        window.location.replace("/dashboard");
       } catch (e: any) {
         console.error(e);
         toast.error(e.message || "Erreur d'accès invité");
-        setStatus("Échec de l'accès invité. Redirection...");
+        setStatus("Échec. Redirection...");
         setTimeout(() => navigate("/login", { replace: true }), 2000);
       }
     })();

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, productionApi } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { db } from "@/lib/offline-db";
@@ -22,12 +22,13 @@ import { Save, Camera, Upload, AlertTriangle, ArrowLeft, X } from "lucide-react"
 import CalibreStep from "@/components/production/CalibreStep";
 import { getCalibreType, getCalibreEntries, NB_ECHANTILLON, calibreFromRecord, type CalibreType } from "@/lib/calibre-config";
 import imageCompression from "browser-image-compression";
+const uuidv4 = () => crypto.randomUUID();
 
 const schema = z.object({
-  domaine_id: z.number({ required_error: "Domaine requis" }),
-  campagne_id: z.number({ required_error: "Campagne requise" }),
-  variete_id: z.number({ required_error: "Variété requise" }),
-  porte_greffe_id: z.number({ required_error: "Porte-greffe requis" }),
+  domaine_id: z.string().uuid("Domaine requis"),
+  campagne_id: z.string().uuid("Campagne requise"),
+  variete_id: z.string().uuid("Variété requise"),
+  porte_greffe_id: z.string().uuid("Porte-greffe requis"),
   ligne_numero: z.number().min(1).max(20, "Ligne entre 1 et 20"),
   position_ligne: z.number().min(1).max(25, "Position entre 1 et 25"),
   date_recolte: z.string().min(1, "Date requise"),
@@ -67,71 +68,54 @@ export default function ProductionWizard() {
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("campagnes").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.campagnes(),
   });
 
   const { data: varietes = [] } = useQuery({
     queryKey: ["varietes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("varietes").select("*, types_varietes(type_nom, type_code, couleur_badge)");
-      return data || [];
-    },
+    queryFn: () => refApi.varietes(),
   });
 
   const { data: porteGreffes = [] } = useQuery({
     queryKey: ["porte_greffes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("porte_greffes").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.porteGreffes(),
   });
 
   const { data: domaines = [] } = useQuery({
     queryKey: ["domaines"],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaines").select("*");
-      return data || [];
-    },
+    queryFn: () => refApi.domaines(),
   });
 
   const { data: existingData } = useQuery({
     queryKey: ["production-edit", editId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("production").select("*").eq("id", Number(editId)).single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => productionApi.get(editId!),
     enabled: isEdit,
   });
 
   useEffect(() => {
     if (existingData) {
       form.reset({
-        domaine_id: existingData.domaine_id,
-        campagne_id: existingData.campagne_id,
-        variete_id: existingData.variete_id,
-        porte_greffe_id: existingData.porte_greffe_id,
-        ligne_numero: existingData.ligne_numero,
-        position_ligne: existingData.position_ligne,
-        date_recolte: existingData.date_recolte,
-        poids_total_kg: Number(existingData.poids_total_kg),
-        nb_fruits_total: existingData.nb_fruits_total,
-        calibre_moyen_mm: existingData.calibre_moyen_mm ? Number(existingData.calibre_moyen_mm) : undefined,
-        taux_declassement_pct: existingData.taux_declassement_pct ? Number(existingData.taux_declassement_pct) : 0,
-        qualite_globale: existingData.qualite_globale || undefined,
-        photo_legende: existingData.photo_legende || undefined,
-        recoltant_nom: existingData.recoltant_nom || undefined,
+        domaine_id: existingData.domaineId,
+        campagne_id: existingData.campagneId,
+        variete_id: existingData.varieteId,
+        porte_greffe_id: existingData.porteGreffeId,
+        ligne_numero: existingData.ligneNumero,
+        position_ligne: existingData.positionLigne,
+        date_recolte: existingData.dateRecolte,
+        poids_total_kg: Number(existingData.poidsTotalKg),
+        nb_fruits_total: existingData.nbFruitsTotal,
+        calibre_moyen_mm: existingData.calibreMoyenMm ? Number(existingData.calibreMoyenMm) : undefined,
+        taux_declassement_pct: existingData.tauxDeclassementPct ? Number(existingData.tauxDeclassementPct) : 0,
+        qualite_globale: existingData.qualiteGlobale || undefined,
+        photo_legende: existingData.photoLegende || undefined,
+        recoltant_nom: existingData.recoltantNom || undefined,
         observations: existingData.observations || undefined,
       });
-      if (existingData.photo_url) {
-        setExistingPhotoUrl(existingData.photo_url);
-        setPhotoPreview(existingData.photo_url);
+      if (existingData.photoUrl) {
+        setExistingPhotoUrl(existingData.photoUrl);
+        setPhotoPreview(existingData.photoUrl);
       }
-      // Load calibre values from existing record
-      const varCode = varietes.find(v => v.id === existingData.variete_id)?.code_variete;
+      const varCode = varietes.find((v: any) => v.id === existingData.varieteId)?.codeVariete;
       if (varCode) {
         const calType = getCalibreType(varCode);
         setCalibreValues(calibreFromRecord(existingData, calType));
@@ -140,26 +124,35 @@ export default function ProductionWizard() {
   }, [existingData, form, varietes]);
 
   const watchedValues = form.watch();
-  const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || watchedValues.domaine_id));
-  const poidsMoyen = watchedValues.poids_total_kg && watchedValues.nb_fruits_total
-    ? ((watchedValues.poids_total_kg * 1000) / watchedValues.nb_fruits_total).toFixed(1)
-    : "-";
+  const currentDomaine = domaines.find(
+    (d: any) => d.id === (userInfo.domaineId || watchedValues.domaine_id)
+  );
+  const poidsMoyen =
+    watchedValues.poids_total_kg && watchedValues.nb_fruits_total
+      ? ((watchedValues.poids_total_kg * 1000) / watchedValues.nb_fruits_total).toFixed(1)
+      : "-";
 
   const codeArbre = (() => {
-    const d = currentDomaine?.code || "??";
+    const d = (currentDomaine as any)?.code || "??";
     const l = String(watchedValues.ligne_numero || 0).padStart(2, "0");
     const p = String(watchedValues.position_ligne || 0).padStart(2, "0");
     return `${d}-L${l}-P${p}`;
   })();
 
-  const selectedVariete = varietes.find((v) => v.id === watchedValues.variete_id);
-  const calibreType: CalibreType = selectedVariete ? getCalibreType(selectedVariete.code_variete) : null;
+  const selectedVariete = varietes.find((v: any) => v.id === watchedValues.variete_id);
+  const calibreType: CalibreType = selectedVariete
+    ? getCalibreType(selectedVariete.codeVariete)
+    : null;
   const calibreEntries = getCalibreEntries(calibreType);
-  const calibreTotal = calibreEntries.reduce((s, e) => s + (calibreValues[e.dbColumn] || 0), 0);
-  const calibreValid = calibreType ? calibreTotal === NB_ECHANTILLON || calibreTotal === 0 : true;
+  const calibreTotal = calibreEntries.reduce(
+    (s, e) => s + (calibreValues[e.dbColumn] || 0),
+    0
+  );
+  const calibreValid =
+    calibreType ? calibreTotal === NB_ECHANTILLON || calibreTotal === 0 : true;
 
   const handleCalibreChange = (dbColumn: string, value: number) => {
-    setCalibreValues(prev => ({ ...prev, [dbColumn]: value }));
+    setCalibreValues((prev) => ({ ...prev, [dbColumn]: value }));
   };
 
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -191,22 +184,13 @@ export default function ProductionWizard() {
       const domaineId = isCentral ? data.domaine_id : userInfo.domaineId;
       if (!domaineId) throw new Error("Domaine requis");
 
-      let photoUrl: string | null = null;
-      if (photoFile && isOnline) {
-        const ext = photoFile.name.split(".").pop() || "jpg";
-        const path = `${user.id}/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from("production-photos").upload(path, photoFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("production-photos").getPublicUrl(path);
-        photoUrl = urlData.publicUrl;
-      }
-
+      // Offline mode — store in Dexie
       if (!isOnline) {
         await db.offlineProductions.add({
-          domaine_id: domaineId!,
-          campagne_id: data.campagne_id,
-          variete_id: data.variete_id,
-          porte_greffe_id: data.porte_greffe_id,
+          domaine_id: Number(domaineId),
+          campagne_id: Number(data.campagne_id),
+          variete_id: Number(data.variete_id),
+          porte_greffe_id: Number(data.porte_greffe_id),
           ligne_numero: data.ligne_numero,
           position_ligne: data.position_ligne,
           date_recolte: data.date_recolte,
@@ -230,35 +214,46 @@ export default function ProductionWizard() {
         return;
       }
 
-      const finalPhotoUrl = photoUrl || existingPhotoUrl;
+      // Online mode — send to API
       const payload = {
-        domaine_id: domaineId!,
-        campagne_id: data.campagne_id,
-        variete_id: data.variete_id,
-        porte_greffe_id: data.porte_greffe_id,
-        ligne_numero: data.ligne_numero,
-        position_ligne: data.position_ligne,
-        date_recolte: data.date_recolte,
-        poids_total_kg: data.poids_total_kg,
-        nb_fruits_total: data.nb_fruits_total,
-        calibre_moyen_mm: data.calibre_moyen_mm || null,
-        taux_declassement_pct: data.taux_declassement_pct || null,
-        qualite_globale: data.qualite_globale || null,
-        photo_url: finalPhotoUrl,
-        photo_legende: data.photo_legende || null,
-        recoltant_nom: data.recoltant_nom || null,
-        observations: data.observations || null,
-        statut_validation: status,
-        nb_fruits_echantillon: calibreType ? NB_ECHANTILLON : null,
+        domaineId,
+        campagneId: data.campagne_id,
+        varieteId: data.variete_id,
+        porteGreffeId: data.porte_greffe_id,
+        ligneNumero: data.ligne_numero,
+        positionLigne: data.position_ligne,
+        dateRecolte: new Date(data.date_recolte).toISOString(),
+        poidsTotalKg: data.poids_total_kg,
+        nbFruitsTotal: data.nb_fruits_total,
+        calibreMoyenMm: data.calibre_moyen_mm ?? null,
+        tauxDeclassementPct: data.taux_declassement_pct ?? null,
+        qualiteGlobale: data.qualite_globale ?? null,
+        photoLegende: data.photo_legende ?? null,
+        recoltantNom: data.recoltant_nom ?? null,
+        observations: data.observations ?? null,
+        statutValidation: status,
+        nbFruitsEchantillon: calibreType ? NB_ECHANTILLON : null,
         ...calibreValues,
       };
 
-      if (isEdit) {
-        const { error } = await supabase.from("production").update(payload as any).eq("id", Number(editId));
-        if (error) throw error;
+      if (photoFile) {
+        const fd = new FormData();
+        fd.append("photo", photoFile);
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== null && v !== undefined) fd.append(k, String(v));
+        });
+        if (isEdit) {
+          await productionApi.updateWithPhoto(editId!, fd);
+        } else {
+          await productionApi.create(fd);
+        }
       } else {
-        const { error } = await supabase.from("production").insert({ ...payload, user_id: user.id } as any);
-        if (error) throw error;
+        const finalPayload = { ...payload, photoUrl: existingPhotoUrl ?? undefined };
+        if (isEdit) {
+          await productionApi.update(editId!, finalPayload);
+        } else {
+          await productionApi.createJson(finalPayload);
+        }
       }
     },
     onSuccess: () => {
@@ -280,111 +275,191 @@ export default function ProductionWizard() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">{isEdit ? "Modifier la saisie" : "Nouvelle saisie"}</h1>
-          {isEdit && existingData?.statut_validation && (
-            <Badge variant={existingData.statut_validation === "Rejeté" ? "destructive" : "secondary"} className="mt-1">
-              {existingData.statut_validation}
+          <h1 className="text-2xl font-bold">
+            {isEdit ? "Modifier la saisie" : "Nouvelle saisie"}
+          </h1>
+          {isEdit && existingData?.statutValidation && (
+            <Badge
+              variant={existingData.statutValidation === "Rejeté" ? "destructive" : "secondary"}
+              className="mt-1"
+            >
+              {existingData.statutValidation}
             </Badge>
           )}
         </div>
       </div>
 
       {/* Rejected comment */}
-      {isEdit && existingData?.statut_validation === "Rejeté" && existingData?.commentaires_validation && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardContent className="pt-4 flex gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-destructive text-sm">Motif du rejet</p>
-              <p className="text-sm text-muted-foreground">{existingData.commentaires_validation}</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {isEdit &&
+        existingData?.statutValidation === "Rejeté" &&
+        existingData?.commentairesValidation && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-4 flex gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-destructive text-sm">Motif du rejet</p>
+                <p className="text-sm text-muted-foreground">
+                  {existingData.commentairesValidation}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       <Form {...form}>
         <form className="space-y-6">
           {/* ─── Localisation ─── */}
           <Card>
-            <CardHeader><CardTitle className="text-lg">📍 Localisation</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg">📍 Localisation</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               {isCentral ? (
-                <FormField control={form.control} name="domaine_id" render={({ field }) => (
-                  <FormItem><FormLabel>Domaine</FormLabel>
-                    <SearchableSelect
-                      options={domaines.map((d) => ({ value: d.id.toString(), label: `${d.nom} (${d.code})` }))}
-                      value={field.value?.toString()}
-                      onValueChange={(v) => field.onChange(Number(v))}
-                      placeholder="Sélectionner un domaine"
-                      searchPlaceholder="Rechercher domaine..."
-                    /><FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="domaine_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Domaine</FormLabel>
+                      <SearchableSelect
+                        options={domaines.map((d: any) => ({
+                          value: d.id,
+                          label: `${d.nom} (${d.code})`,
+                        }))}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder="Sélectionner un domaine"
+                        searchPlaceholder="Rechercher domaine..."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               ) : (
-                <div><Label>Domaine</Label><Input value={currentDomaine ? `${currentDomaine.nom} (${currentDomaine.code})` : "Non assigné"} disabled /></div>
+                <div>
+                  <Label>Domaine</Label>
+                  <Input
+                    value={
+                      currentDomaine
+                        ? `${(currentDomaine as any).nom} (${(currentDomaine as any).code})`
+                        : "Non assigné"
+                    }
+                    disabled
+                  />
+                </div>
               )}
 
-              <FormField control={form.control} name="campagne_id" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Campagne</FormLabel>
-                  <SearchableSelect
-                    options={campagnes.map((c) => ({ value: c.id.toString(), label: c.code_campagne }))}
-                    value={field.value?.toString()}
-                    onValueChange={(v) => field.onChange(Number(v))}
-                    placeholder="Sélectionner campagne"
-                    searchPlaceholder="Rechercher campagne..."
-                  />
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="campagne_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Campagne</FormLabel>
+                    <SearchableSelect
+                      options={campagnes.map((c: any) => ({
+                        value: c.id,
+                        label: c.codeCampagne,
+                      }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Sélectionner campagne"
+                      searchPlaceholder="Rechercher campagne..."
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              <FormField control={form.control} name="variete_id" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Variété</FormLabel>
-                  <SearchableSelect
-                    options={varietes.map((v) => ({
-                      value: v.id.toString(),
-                      label: `${v.code_variete} - ${v.nom_commercial || ""}`,
-                      badge: (v.types_varietes as any)?.type_code ? { text: (v.types_varietes as any).type_code, color: (v.types_varietes as any)?.couleur_badge || "#999" } : undefined,
-                    }))}
-                    value={field.value?.toString()}
-                    onValueChange={(v) => field.onChange(Number(v))}
-                    placeholder="Rechercher variété..."
-                    searchPlaceholder="Code ou nom..."
-                  />
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="variete_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Variété</FormLabel>
+                    <SearchableSelect
+                      options={varietes.map((v: any) => ({
+                        value: v.id,
+                        label: `${v.codeVariete} - ${v.nomCommercial || ""}`,
+                        badge: v.typeVariete?.typeCode
+                          ? {
+                              text: v.typeVariete.typeCode,
+                              color: v.typeVariete.couleurBadge || "#999",
+                            }
+                          : undefined,
+                      }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Rechercher variété..."
+                      searchPlaceholder="Code ou nom..."
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              <FormField control={form.control} name="porte_greffe_id" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Porte-greffe</FormLabel>
-                  <div className="flex gap-2 flex-wrap">
-                    {porteGreffes.map((pg) => (
-                      <Button key={pg.id} type="button" variant={field.value === pg.id ? "default" : "outline"} size="sm" onClick={() => field.onChange(pg.id)}>
-                        {pg.code_pg}
-                      </Button>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="porte_greffe_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Porte-greffe</FormLabel>
+                    <div className="flex gap-2 flex-wrap">
+                      {porteGreffes.map((pg: any) => (
+                        <Button
+                          key={pg.id}
+                          type="button"
+                          variant={field.value === pg.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => field.onChange(pg.id)}
+                        >
+                          {pg.codePg}
+                        </Button>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="ligne_numero" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ligne (1-20)</FormLabel>
-                    <FormControl><Input type="number" min={1} max={20} {...field} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="position_ligne" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Position (1-25)</FormLabel>
-                    <FormControl><Input type="number" min={1} max={25} {...field} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="ligne_numero"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ligne (1-20)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={20}
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="position_ligne"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Position (1-25)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={25}
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <div>
@@ -392,35 +467,66 @@ export default function ProductionWizard() {
                 <Input value={codeArbre} disabled className="font-mono" />
               </div>
 
-              <FormField control={form.control} name="date_recolte" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date de récolte</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="date_recolte"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date de récolte</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
           {/* ─── Production ─── */}
           <Card>
-            <CardHeader><CardTitle className="text-lg">🍊 Données de production</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg">🍊 Données de production</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="poids_total_kg" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Poids total (kg)</FormLabel>
-                    <FormControl><Input type="number" step="0.001" placeholder="0.000" {...field} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="nb_fruits_total" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre de fruits</FormLabel>
-                    <FormControl><Input type="number" placeholder="0" {...field} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="poids_total_kg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Poids total (kg)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.001"
+                          placeholder="0.000"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="nb_fruits_total"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre de fruits</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <Card className="bg-accent/30 border-0">
@@ -430,41 +536,81 @@ export default function ProductionWizard() {
                 </CardContent>
               </Card>
 
-              <FormField control={form.control} name="calibre_moyen_mm" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Calibre moyen (mm) — optionnel</FormLabel>
-                  <FormControl><Input type="number" step="0.01" {...field} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="calibre_moyen_mm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Calibre moyen (mm) — optionnel</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(e.target.value ? Number(e.target.value) : undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              <FormField control={form.control} name="taux_declassement_pct" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Taux de déclassement : {field.value || 0}%</FormLabel>
-                  <FormControl>
-                    <Slider min={0} max={100} step={1} value={[field.value || 0]} onValueChange={([v]) => field.onChange(v)} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="taux_declassement_pct"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Taux de déclassement : {field.value || 0}%</FormLabel>
+                    <FormControl>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={[field.value || 0]}
+                        onValueChange={([v]) => field.onChange(v)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              <FormField control={form.control} name="qualite_globale" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Qualité globale</FormLabel>
-                  <div className="flex gap-2 flex-wrap">
-                    {["A", "B", "C", "Hors norme"].map((q) => (
-                      <Button key={q} type="button" size="sm"
-                        variant={field.value === q ? "default" : "outline"}
-                        className={field.value === q ? (q === "A" ? "bg-green-600 hover:bg-green-700" : q === "B" ? "bg-blue-600 hover:bg-blue-700" : q === "C" ? "bg-yellow-600 hover:bg-yellow-700" : "bg-destructive hover:bg-destructive/90") : ""}
-                        onClick={() => field.onChange(q)}
-                      >
-                        {q}
-                      </Button>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="qualite_globale"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Qualité globale</FormLabel>
+                    <div className="flex gap-2 flex-wrap">
+                      {["A", "B", "C", "Hors norme"].map((q) => (
+                        <Button
+                          key={q}
+                          type="button"
+                          size="sm"
+                          variant={field.value === q ? "default" : "outline"}
+                          className={
+                            field.value === q
+                              ? q === "A"
+                                ? "bg-green-600 hover:bg-green-700"
+                                : q === "B"
+                                ? "bg-blue-600 hover:bg-blue-700"
+                                : q === "C"
+                                ? "bg-yellow-600 hover:bg-yellow-700"
+                                : "bg-destructive hover:bg-destructive/90"
+                              : ""
+                          }
+                          onClick={() => field.onChange(q)}
+                        >
+                          {q}
+                        </Button>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
@@ -474,46 +620,99 @@ export default function ProductionWizard() {
               type={calibreType}
               values={calibreValues}
               onChange={handleCalibreChange}
-              codeVariete={selectedVariete?.code_variete}
-              codePG={porteGreffes.find(p => p.id === watchedValues.porte_greffe_id)?.code_pg}
+              codeVariete={selectedVariete?.codeVariete}
+              codePG={
+                porteGreffes.find((p: any) => p.id === watchedValues.porte_greffe_id)?.codePg
+              }
             />
           )}
 
           {/* ─── Photo & Observations ─── */}
           <Card>
-            <CardHeader><CardTitle className="text-lg">📷 Photo & Observations</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg">📷 Photo & Observations</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label>Photo</Label>
                 <div className="flex gap-2 mt-2">
                   <label className="cursor-pointer">
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
-                    <Button type="button" variant="outline" size="sm" asChild><span><Camera className="h-4 w-4 mr-1" />Prendre</span></Button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handlePhoto}
+                    />
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <span>
+                        <Camera className="h-4 w-4 mr-1" />
+                        Prendre
+                      </span>
+                    </Button>
                   </label>
                   <label className="cursor-pointer">
                     <input type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
-                    <Button type="button" variant="outline" size="sm" asChild><span><Upload className="h-4 w-4 mr-1" />Choisir</span></Button>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <span>
+                        <Upload className="h-4 w-4 mr-1" />
+                        Choisir
+                      </span>
+                    </Button>
                   </label>
                 </div>
                 {photoPreview && (
                   <div className="relative mt-3 inline-block">
                     <img src={photoPreview} alt="Preview" className="rounded-lg max-h-48 object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={removePhoto}>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-1 right-1 h-6 w-6"
+                      onClick={removePhoto}
+                    >
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
                 )}
               </div>
 
-              <FormField control={form.control} name="photo_legende" render={({ field }) => (
-                <FormItem><FormLabel>Légende (optionnel)</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="recoltant_nom" render={({ field }) => (
-                <FormItem><FormLabel>Récoltant</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="observations" render={({ field }) => (
-                <FormItem><FormLabel>Observations (optionnel)</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="photo_legende"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Légende (optionnel)</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="recoltant_nom"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Récoltant</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="observations"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observations (optionnel)</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
@@ -534,10 +733,14 @@ export default function ProductionWizard() {
               <Button
                 type="button"
                 onClick={() => onSubmit("Soumis")}
-                disabled={submitMutation.isPending || (calibreType !== null && calibreTotal > 0 && !calibreValid)}
+                disabled={
+                  submitMutation.isPending ||
+                  (calibreType !== null && calibreTotal > 0 && !calibreValid)
+                }
                 className="bg-primary hover:bg-primary/90"
               >
-                <Save className="h-4 w-4 mr-1" /> {isEdit ? "Soumettre la correction" : "Enregistrer"}
+                <Save className="h-4 w-4 mr-1" />
+                {isEdit ? "Soumettre la correction" : "Enregistrer"}
               </Button>
             </div>
           </div>

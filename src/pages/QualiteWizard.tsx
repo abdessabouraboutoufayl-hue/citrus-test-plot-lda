@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, qualiteApi } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,26 +18,26 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Save, Camera, Upload, AlertTriangle, Info, Check } from "lucide-react";
 
 const schema = z.object({
-  domaine_id: z.number().optional().nullable(),
-  campagne_id: z.number({ required_error: "Campagne requise" }),
-  variete_id: z.number({ required_error: "Variété requise" }),
-  porte_greffe_id: z.number({ required_error: "Porte-greffe requis" }),
-  date_analyse: z.string().min(1, "Date requise"),
-  nb_fruits_echantillon: z.number().int().min(1).max(20).default(10),
-  pct_jus: z.number().min(0).max(100).optional().nullable(),
-  poids_jus_g: z.number().min(0).optional().nullable(),
-  volume_jus_ml: z.number().min(0).optional().nullable(),
-  brix_degres: z.number({ required_error: "Brix requis" }).min(5, "Min 5").max(20, "Max 20"),
-  acidite_gl: z.number({ required_error: "Acidité requise" }).min(0.1, "Min 0.1").max(5, "Max 5"),
-  volume_naoh_ml: z.number().min(0).optional().nullable(),
-  nb_pepins_echantillon_total: z.number().int().min(0).optional().nullable(),
-  nb_fruits_avec_pepins: z.number().int().min(0).optional().nullable(),
-  moyenne_fermete_peau_kg_cm2: z.number().min(0).optional().nullable(),
-  moyenne_fermete_fruit_kg_cm2: z.number().min(0).optional().nullable(),
-  granulation_severe: z.enum(["Oui", "Non"]).optional().nullable(),
-  granulation_legere: z.enum(["Oui", "Non"]).optional().nullable(),
-  photo_legende: z.string().optional(),
-  technicien_nom: z.string().min(2, "Technicien requis"),
+  domaineId: z.number().optional().nullable(),
+  campagneId: z.number({ required_error: "Campagne requise" }),
+  varieteId: z.number({ required_error: "Variété requise" }),
+  porteGreffeId: z.number({ required_error: "Porte-greffe requis" }),
+  dateAnalyse: z.string().min(1, "Date requise"),
+  nbFruitsEchantillon: z.number().int().min(1).max(20).default(10),
+  pctJus: z.number().min(0).max(100).optional().nullable(),
+  poidsJusG: z.number().min(0).optional().nullable(),
+  volumeJusMl: z.number().min(0).optional().nullable(),
+  brixDegres: z.number({ required_error: "Brix requis" }).min(5, "Min 5").max(20, "Max 20"),
+  aciditeGl: z.number({ required_error: "Acidité requise" }).min(0.1, "Min 0.1").max(5, "Max 5"),
+  volumeNaohMl: z.number().min(0).optional().nullable(),
+  nbPepinsEchantillonTotal: z.number().int().min(0).optional().nullable(),
+  nbFruitsAvecPepins: z.number().int().min(0).optional().nullable(),
+  moyenneFermetePeauKgCm2: z.number().min(0).optional().nullable(),
+  moyenneFermeteFruitKgCm2: z.number().min(0).optional().nullable(),
+  granulationSevere: z.enum(["Oui", "Non"]).optional().nullable(),
+  granulationLegere: z.enum(["Oui", "Non"]).optional().nullable(),
+  photoLegende: z.string().optional(),
+  technicienNom: z.string().min(2, "Technicien requis"),
   observations: z.string().optional(),
 });
 
@@ -65,15 +65,15 @@ export default function QualiteWizard() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { user, userInfo } = useAuth();
+  const { userInfo } = useAuth();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      nb_fruits_echantillon: 10,
-      date_analyse: new Date().toISOString().split("T")[0],
-      technicien_nom: "",
-      domaine_id: userInfo.domaineId || undefined,
+      nbFruitsEchantillon: 10,
+      dateAnalyse: new Date().toISOString().split("T")[0],
+      technicienNom: "",
+      domaineId: userInfo.domaineId ? Number(userInfo.domaineId) : undefined,
     },
   });
 
@@ -81,72 +81,64 @@ export default function QualiteWizard() {
   const { data: existingData, isLoading: loadingEdit } = useQuery({
     queryKey: ["qualite-edit", editId],
     enabled: isEdit,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("qualite_interne")
-        .select("*")
-        .eq("id", Number(editId))
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => qualiteApi.get(Number(editId)),
   });
 
   useEffect(() => {
     if (existingData) {
       form.reset({
-        domaine_id: existingData.domaine_id,
-        campagne_id: existingData.campagne_id,
-        variete_id: existingData.variete_id,
-        porte_greffe_id: existingData.porte_greffe_id,
-        date_analyse: existingData.date_analyse,
-        nb_fruits_echantillon: existingData.nb_fruits_echantillon,
-        pct_jus: existingData.pct_jus,
-        poids_jus_g: existingData.poids_jus_g,
-        volume_jus_ml: existingData.volume_jus_ml,
-        brix_degres: existingData.brix_degres,
-        acidite_gl: existingData.acidite_gl,
-        volume_naoh_ml: existingData.volume_naoh_ml,
-        nb_pepins_echantillon_total: existingData.nb_pepins_echantillon_total,
-        nb_fruits_avec_pepins: existingData.nb_fruits_avec_pepins,
-        moyenne_fermete_peau_kg_cm2: existingData.moyenne_fermete_peau_kg_cm2,
-        moyenne_fermete_fruit_kg_cm2: existingData.moyenne_fermete_fruit_kg_cm2,
-        granulation_severe: existingData.granulation_severe as any,
-        granulation_legere: existingData.granulation_legere as any,
-        photo_legende: existingData.photo_legende || "",
-        technicien_nom: existingData.technicien_nom,
+        domaineId: existingData.domaineId,
+        campagneId: existingData.campagneId,
+        varieteId: existingData.varieteId,
+        porteGreffeId: existingData.porteGreffeId,
+        dateAnalyse: existingData.dateAnalyse,
+        nbFruitsEchantillon: existingData.nbFruitsEchantillon,
+        pctJus: existingData.pctJus,
+        poidsJusG: existingData.poidsJusG,
+        volumeJusMl: existingData.volumeJusMl,
+        brixDegres: existingData.brixDegres,
+        aciditeGl: existingData.aciditeGl,
+        volumeNaohMl: existingData.volumeNaohMl,
+        nbPepinsEchantillonTotal: existingData.nbPepinsEchantillonTotal,
+        nbFruitsAvecPepins: existingData.nbFruitsAvecPepins,
+        moyenneFermetePeauKgCm2: existingData.moyenneFermetePeauKgCm2,
+        moyenneFermeteFruitKgCm2: existingData.moyenneFermeteFruitKgCm2,
+        granulationSevere: existingData.granulationSevere as any,
+        granulationLegere: existingData.granulationLegere as any,
+        photoLegende: existingData.photoLegende || "",
+        technicienNom: existingData.technicienNom,
         observations: existingData.observations || "",
       });
-      if (existingData.photo_fruits_coupes_url) {
-        setPhotoPreview(existingData.photo_fruits_coupes_url);
+      if (existingData.photoFruitsCoupesUrl) {
+        setPhotoPreview(existingData.photoFruitsCoupesUrl);
       }
     }
   }, [existingData]);
 
   const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: async () => { const { data } = await supabase.from("campagnes").select("*"); return data || []; },
+    queryFn: () => refApi.campagnes(),
   });
   const { data: varietes = [] } = useQuery({
     queryKey: ["varietes"],
-    queryFn: async () => { const { data } = await supabase.from("varietes").select("*, types_varietes(type_nom, type_code, couleur_badge)"); return data || []; },
+    queryFn: () => refApi.varietes(),
   });
   const { data: porteGreffes = [] } = useQuery({
     queryKey: ["porte_greffes"],
-    queryFn: async () => { const { data } = await supabase.from("porte_greffes").select("*"); return data || []; },
+    queryFn: () => refApi.porteGreffes(),
   });
   const { data: domaines = [] } = useQuery({
     queryKey: ["domaines"],
-    queryFn: async () => { const { data } = await supabase.from("domaines").select("*"); return data || []; },
+    queryFn: () => refApi.domaines(),
   });
 
   const isCentral = userInfo.role === "responsable_central";
   const w = form.watch();
-  const currentDomaine = domaines.find((d) => d.id === (userInfo.domaineId || w.domaine_id));
-  const ratioEA = w.brix_degres && w.acidite_gl && w.acidite_gl !== 0 ? w.brix_degres / w.acidite_gl : null;
-  const moyennePepins = w.nb_pepins_echantillon_total != null && w.nb_fruits_echantillon
-    ? (w.nb_pepins_echantillon_total / w.nb_fruits_echantillon).toFixed(2) : "-";
-  const moisAnalyse = w.date_analyse ? new Date(w.date_analyse).toLocaleString("fr-FR", { month: "long" }) : "-";
+  const currentDomaine = domaines.find((d: any) => d.id === (userInfo.domaineId ? Number(userInfo.domaineId) : w.domaineId));
+  const ratioEA = w.brixDegres && w.aciditeGl && w.aciditeGl !== 0 ? w.brixDegres / w.aciditeGl : null;
+  const moyennePepins = w.nbPepinsEchantillonTotal != null && w.nbFruitsEchantillon
+    ? (w.nbPepinsEchantillonTotal / w.nbFruitsEchantillon).toFixed(2) : "-";
+  const moisAnalyse = w.dateAnalyse ? new Date(w.dateAnalyse).toLocaleString("fr-FR", { month: "long" }) : "-";
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,53 +151,49 @@ export default function QualiteWizard() {
 
   const submitMutation = useMutation({
     mutationFn: async ({ data, status }: { data: FormData; status: string }) => {
-      if (!user) throw new Error("Non authentifié");
-      const domaineId = isCentral ? data.domaine_id : userInfo.domaineId;
+      const domaineId = isCentral ? data.domaineId : (userInfo.domaineId ? Number(userInfo.domaineId) : null);
       if (!domaineId) throw new Error("Domaine requis");
 
-      let photoUrl: string | null = existingData?.photo_fruits_coupes_url || null;
-      if (photoFile) {
-        const ext = photoFile.name.split(".").pop();
-        const path = `qualite/${user.id}/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from("production-photos").upload(path, photoFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("production-photos").getPublicUrl(path);
-        photoUrl = urlData.publicUrl;
-      }
-
-      const payload = {
-        domaine_id: domaineId,
-        campagne_id: data.campagne_id,
-        variete_id: data.variete_id,
-        porte_greffe_id: data.porte_greffe_id,
-        date_analyse: data.date_analyse,
-        nb_fruits_echantillon: data.nb_fruits_echantillon,
-        pct_jus: data.pct_jus || null,
-        poids_jus_g: data.poids_jus_g || null,
-        volume_jus_ml: data.volume_jus_ml || null,
-        brix_degres: data.brix_degres,
-        acidite_gl: data.acidite_gl,
-        volume_naoh_ml: data.volume_naoh_ml || null,
-        nb_pepins_echantillon_total: data.nb_pepins_echantillon_total || null,
-        nb_fruits_avec_pepins: data.nb_fruits_avec_pepins || null,
-        moyenne_fermete_peau_kg_cm2: data.moyenne_fermete_peau_kg_cm2 || null,
-        moyenne_fermete_fruit_kg_cm2: data.moyenne_fermete_fruit_kg_cm2 || null,
-        granulation_severe: data.granulation_severe || null,
-        granulation_legere: data.granulation_legere || null,
+      const payload: Record<string, any> = {
+        domaineId,
+        campagneId: data.campagneId,
+        varieteId: data.varieteId,
+        porteGreffeId: data.porteGreffeId,
+        dateAnalyse: data.dateAnalyse,
+        nbFruitsEchantillon: data.nbFruitsEchantillon,
+        pctJus: data.pctJus || null,
+        poidsJusG: data.poidsJusG || null,
+        volumeJusMl: data.volumeJusMl || null,
+        brixDegres: data.brixDegres,
+        aciditeGl: data.aciditeGl,
+        volumeNaohMl: data.volumeNaohMl || null,
+        nbPepinsEchantillonTotal: data.nbPepinsEchantillonTotal || null,
+        nbFruitsAvecPepins: data.nbFruitsAvecPepins || null,
+        moyenneFermetePeauKgCm2: data.moyenneFermetePeauKgCm2 || null,
+        moyenneFermeteFruitKgCm2: data.moyenneFermeteFruitKgCm2 || null,
+        granulationSevere: data.granulationSevere || null,
+        granulationLegere: data.granulationLegere || null,
         observations: data.observations || null,
-        photo_fruits_coupes_url: photoUrl,
-        photo_legende: data.photo_legende || null,
-        technicien_nom: data.technicien_nom,
-        statut_validation: status,
-      } as any;
+        photoLegende: data.photoLegende || null,
+        technicienNom: data.technicienNom,
+        statutValidation: status,
+      };
 
-      if (isEdit) {
-        const { error } = await supabase.from("qualite_interne").update(payload).eq("id", Number(editId));
-        if (error) throw error;
+      if (photoFile) {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([k, v]) => { if (v != null) formData.append(k, String(v)); });
+        formData.append("photo", photoFile);
+        if (isEdit) {
+          return qualiteApi.updateWithPhoto(Number(editId), formData);
+        } else {
+          return qualiteApi.createWithPhoto(formData);
+        }
       } else {
-        payload.user_id = user.id;
-        const { error } = await supabase.from("qualite_interne").insert(payload);
-        if (error) throw error;
+        if (isEdit) {
+          return qualiteApi.update(Number(editId), payload);
+        } else {
+          return qualiteApi.create(payload);
+        }
       }
     },
     onSuccess: () => { toast.success(isEdit ? "Analyse modifiée" : "Analyse qualité enregistrée"); navigate("/qualite"); },
@@ -224,7 +212,7 @@ export default function QualiteWizard() {
   };
 
   const steps = ["Identification", "Jus", "Chimique", "Pépins & Fermeté", "Photo & Obs.", "Récapitulatif"];
-  const selectedVariete = varietes.find((v) => v.id === w.variete_id);
+  const selectedVariete = varietes.find((v: any) => v.id === w.varieteId);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -252,10 +240,10 @@ export default function QualiteWizard() {
               <CardHeader><CardTitle>Identification</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {isCentral ? (
-                  <FormField control={form.control} name="domaine_id" render={({ field }) => (
+                  <FormField control={form.control} name="domaineId" render={({ field }) => (
                     <FormItem><FormLabel>Domaine</FormLabel>
                       <SearchableSelect
-                        options={domaines.map((d) => ({ value: d.id.toString(), label: `${d.nom} (${d.code})` }))}
+                        options={domaines.map((d: any) => ({ value: d.id.toString(), label: `${d.nom} (${d.code})` }))}
                         value={field.value?.toString()}
                         onValueChange={(v) => field.onChange(Number(v))}
                         placeholder="Sélectionner un domaine"
@@ -264,12 +252,12 @@ export default function QualiteWizard() {
                     </FormItem>
                   )} />
                 ) : (
-                  <div><Label>Domaine</Label><Input value={currentDomaine?.nom || "Non assigné"} disabled /></div>
+                  <div><Label>Domaine</Label><Input value={(currentDomaine as any)?.nom || "Non assigné"} disabled /></div>
                 )}
-                <FormField control={form.control} name="campagne_id" render={({ field }) => (
+                <FormField control={form.control} name="campagneId" render={({ field }) => (
                   <FormItem><FormLabel>Campagne</FormLabel>
                     <SearchableSelect
-                      options={campagnes.map((c) => ({ value: c.id.toString(), label: c.code_campagne }))}
+                      options={campagnes.map((c: any) => ({ value: c.id.toString(), label: c.codeCampagne }))}
                       value={field.value?.toString()}
                       onValueChange={(v) => field.onChange(Number(v))}
                       placeholder="Sélectionner campagne"
@@ -277,13 +265,13 @@ export default function QualiteWizard() {
                     /><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="variete_id" render={({ field }) => (
+                <FormField control={form.control} name="varieteId" render={({ field }) => (
                   <FormItem><FormLabel>Code Variété</FormLabel>
                     <SearchableSelect
-                      options={varietes.map((v) => ({
+                      options={varietes.map((v: any) => ({
                         value: v.id.toString(),
-                        label: `${v.code_variete} - ${v.nom_commercial || ""}`,
-                        badge: (v.types_varietes as any)?.type_code ? { text: (v.types_varietes as any).type_code, color: (v.types_varietes as any)?.couleur_badge || "#999" } : undefined,
+                        label: `${v.codeVariete} - ${v.nomCommercial || ""}`,
+                        badge: v.typeVariete?.typeCode ? { text: v.typeVariete.typeCode, color: v.typeVariete?.couleurBadge || "#999" } : undefined,
                       }))}
                       value={field.value?.toString()}
                       onValueChange={(v) => field.onChange(Number(v))}
@@ -292,20 +280,20 @@ export default function QualiteWizard() {
                     /><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="porte_greffe_id" render={({ field }) => (
+                <FormField control={form.control} name="porteGreffeId" render={({ field }) => (
                   <FormItem><FormLabel>Porte-greffe</FormLabel>
                     <div className="flex gap-2 flex-wrap">
-                      {porteGreffes.map((pg) => (
-                        <Button key={pg.id} type="button" variant={field.value === pg.id ? "default" : "outline"} size="sm" onClick={() => field.onChange(pg.id)}>{pg.code_pg}</Button>
+                      {porteGreffes.map((pg: any) => (
+                        <Button key={pg.id} type="button" variant={field.value === pg.id ? "default" : "outline"} size="sm" onClick={() => field.onChange(pg.id)}>{pg.codePg}</Button>
                       ))}
                     </div><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="date_analyse" render={({ field }) => (
+                <FormField control={form.control} name="dateAnalyse" render={({ field }) => (
                   <FormItem><FormLabel>Date analyse</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <div><Label>Mois analyse</Label><Input value={moisAnalyse} disabled /></div>
-                <FormField control={form.control} name="nb_fruits_echantillon" render={({ field }) => (
+                <FormField control={form.control} name="nbFruitsEchantillon" render={({ field }) => (
                   <FormItem><FormLabel>Nb fruits échantillon (1-20)</FormLabel>
                     <FormControl><Input type="number" min={1} max={20} {...field} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl><FormMessage />
                   </FormItem>
@@ -323,18 +311,18 @@ export default function QualiteWizard() {
             <Card>
               <CardHeader><CardTitle>Paramètres Jus</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">Mesures sur échantillon {w.nb_fruits_echantillon} fruits</p>
-                <FormField control={form.control} name="pct_jus" render={({ field }) => (
+                <p className="text-sm text-muted-foreground">Mesures sur échantillon {w.nbFruitsEchantillon} fruits</p>
+                <FormField control={form.control} name="pctJus" render={({ field }) => (
                   <FormItem><FormLabel>% Jus</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="42.5" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span></div><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="poids_jus_g" render={({ field }) => (
+                <FormField control={form.control} name="poidsJusG" render={({ field }) => (
                   <FormItem><FormLabel>Poids Jus</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="125.3" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">g</span></div><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="volume_jus_ml" render={({ field }) => (
+                <FormField control={form.control} name="volumeJusMl" render={({ field }) => (
                   <FormItem><FormLabel>Volume Jus</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="122.0" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">mL</span></div><FormMessage />
                   </FormItem>
@@ -348,17 +336,17 @@ export default function QualiteWizard() {
             <Card>
               <CardHeader><CardTitle>Paramètres Chimiques</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <FormField control={form.control} name="brix_degres" render={({ field }) => (
+                <FormField control={form.control} name="brixDegres" render={({ field }) => (
                   <FormItem><FormLabel>Brix (5-20) *</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="11.8" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">°</span></div><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="acidite_gl" render={({ field }) => (
+                <FormField control={form.control} name="aciditeGl" render={({ field }) => (
                   <FormItem><FormLabel>Acidité (0.1-5) *</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.001" placeholder="0.95" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">g/L</span></div><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="volume_naoh_ml" render={({ field }) => (
+                <FormField control={form.control} name="volumeNaohMl" render={({ field }) => (
                   <FormItem><FormLabel>Volume NaOH (optionnel)</FormLabel>
                     <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="9.5" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">mL</span></div><FormMessage />
                   </FormItem>
@@ -366,7 +354,7 @@ export default function QualiteWizard() {
                 <Card className="border-0 bg-accent/30">
                   <CardContent className="pt-4">
                     <p className="text-sm text-muted-foreground mb-1">Ratio E/A (auto-calculé)</p>
-                    <EaBadge brix={w.brix_degres} acidite={w.acidite_gl} />
+                    <EaBadge brix={w.brixDegres} acidite={w.aciditeGl} />
                     {!ratioEA && <p className="text-sm text-muted-foreground">Saisissez Brix et Acidité</p>}
                   </CardContent>
                 </Card>
@@ -381,15 +369,15 @@ export default function QualiteWizard() {
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold">🫘 Pépins</h3>
-                  <FormField control={form.control} name="nb_pepins_echantillon_total" render={({ field }) => (
+                  <FormField control={form.control} name="nbPepinsEchantillonTotal" render={({ field }) => (
                     <FormItem><FormLabel>Nb pépins total échantillon</FormLabel>
                       <FormControl><Input type="number" placeholder="23" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><FormMessage />
                     </FormItem>
                   )} />
                   <div><Label>Moyenne pépins/fruit</Label><Input value={moyennePepins} disabled /></div>
-                  <FormField control={form.control} name="nb_fruits_avec_pepins" render={({ field }) => (
-                    <FormItem><FormLabel>Nb fruits avec pépins (max {w.nb_fruits_echantillon})</FormLabel>
-                      <FormControl><Input type="number" max={w.nb_fruits_echantillon} placeholder="7" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><FormMessage />
+                  <FormField control={form.control} name="nbFruitsAvecPepins" render={({ field }) => (
+                    <FormItem><FormLabel>Nb fruits avec pépins (max {w.nbFruitsEchantillon})</FormLabel>
+                      <FormControl><Input type="number" max={w.nbFruitsEchantillon} placeholder="7" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><FormMessage />
                     </FormItem>
                   )} />
                 </div>
@@ -398,12 +386,12 @@ export default function QualiteWizard() {
                   <h3 className="text-sm font-semibold">💪 Fermeté (Pénétromètre)</h3>
                   <p className="text-xs text-muted-foreground">Mesures pénétromètre moyenne 3 points</p>
                   <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="moyenne_fermete_peau_kg_cm2" render={({ field }) => (
+                    <FormField control={form.control} name="moyenneFermetePeauKgCm2" render={({ field }) => (
                       <FormItem><FormLabel>Fermeté peau</FormLabel>
                         <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="3.5" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">Kg/cm²</span></div><FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="moyenne_fermete_fruit_kg_cm2" render={({ field }) => (
+                    <FormField control={form.control} name="moyenneFermeteFruitKgCm2" render={({ field }) => (
                       <FormItem><FormLabel>Fermeté fruit</FormLabel>
                         <div className="relative"><FormControl><Input type="number" step="0.01" placeholder="1.2" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)} /></FormControl><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">Kg/cm²</span></div><FormMessage />
                       </FormItem>
@@ -414,7 +402,7 @@ export default function QualiteWizard() {
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold">Granulation</h3>
                   <p className="text-xs text-muted-foreground">Défaut texture vésicules (grains de pulpe)</p>
-                  <FormField control={form.control} name="granulation_severe" render={({ field }) => (
+                  <FormField control={form.control} name="granulationSevere" render={({ field }) => (
                     <FormItem><FormLabel>Granulation sévère</FormLabel>
                       <div className="flex gap-2">
                         {(["Oui", "Non"] as const).map((v) => (
@@ -423,7 +411,7 @@ export default function QualiteWizard() {
                       </div><FormMessage />
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="granulation_legere" render={({ field }) => (
+                  <FormField control={form.control} name="granulationLegere" render={({ field }) => (
                     <FormItem><FormLabel>Granulation légère</FormLabel>
                       <div className="flex gap-2">
                         {(["Oui", "Non"] as const).map((v) => (
@@ -457,10 +445,10 @@ export default function QualiteWizard() {
                   </div>
                   {photoPreview && <img src={photoPreview} alt="Preview" className="mt-3 rounded-lg max-h-48 object-cover" />}
                 </div>
-                <FormField control={form.control} name="photo_legende" render={({ field }) => (
+                <FormField control={form.control} name="photoLegende" render={({ field }) => (
                   <FormItem><FormLabel>Légende photo (optionnel)</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>
                 )} />
-                <FormField control={form.control} name="technicien_nom" render={({ field }) => (
+                <FormField control={form.control} name="technicienNom" render={({ field }) => (
                   <FormItem><FormLabel>Technicien *</FormLabel><FormControl><Input placeholder="Nom du technicien" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="observations" render={({ field }) => (
@@ -478,37 +466,37 @@ export default function QualiteWizard() {
                 <div className="grid gap-4">
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Identification</h3>
-                    <p>Variété : <strong>{selectedVariete?.code_variete}</strong> - {selectedVariete?.nom_commercial}</p>
-                    <p>PG : <strong>{porteGreffes.find(pg => pg.id === w.porte_greffe_id)?.code_pg}</strong></p>
-                    <p>Date : {w.date_analyse} • Mois : {moisAnalyse}</p>
-                    <p>Échantillon : {w.nb_fruits_echantillon} fruits</p>
+                    <p>Variété : <strong>{(selectedVariete as any)?.codeVariete}</strong> - {(selectedVariete as any)?.nomCommercial}</p>
+                    <p>PG : <strong>{porteGreffes.find((pg: any) => pg.id === w.porteGreffeId)?.codePg}</strong></p>
+                    <p>Date : {w.dateAnalyse} • Mois : {moisAnalyse}</p>
+                    <p>Échantillon : {w.nbFruitsEchantillon} fruits</p>
                   </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Jus</h3>
-                    <p>% Jus : {w.pct_jus ?? "-"} • Poids : {w.poids_jus_g ?? "-"} g • Volume : {w.volume_jus_ml ?? "-"} mL</p>
+                    <p>% Jus : {w.pctJus ?? "-"} • Poids : {w.poidsJusG ?? "-"} g • Volume : {w.volumeJusMl ?? "-"} mL</p>
                   </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Chimique</h3>
-                    <p>Brix : {w.brix_degres}° • Acidité : {w.acidite_gl} g/L • NaOH : {w.volume_naoh_ml ?? "-"} mL</p>
-                    <div className="mt-1"><EaBadge brix={w.brix_degres} acidite={w.acidite_gl} /></div>
+                    <p>Brix : {w.brixDegres}° • Acidité : {w.aciditeGl} g/L • NaOH : {w.volumeNaohMl ?? "-"} mL</p>
+                    <div className="mt-1"><EaBadge brix={w.brixDegres} acidite={w.aciditeGl} /></div>
                   </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Pépins</h3>
-                    <p>Total : {w.nb_pepins_echantillon_total ?? "-"} • Moy/fruit : {moyennePepins} • Fruits avec : {w.nb_fruits_avec_pepins ?? "-"}</p>
+                    <p>Total : {w.nbPepinsEchantillonTotal ?? "-"} • Moy/fruit : {moyennePepins} • Fruits avec : {w.nbFruitsAvecPepins ?? "-"}</p>
                   </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Fermeté</h3>
-                    <p>Peau : {w.moyenne_fermete_peau_kg_cm2 ?? "-"} Kg/cm² • Fruit : {w.moyenne_fermete_fruit_kg_cm2 ?? "-"} Kg/cm²</p>
+                    <p>Peau : {w.moyenneFermetePeauKgCm2 ?? "-"} Kg/cm² • Fruit : {w.moyenneFermeteFruitKgCm2 ?? "-"} Kg/cm²</p>
                   </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-muted-foreground">Granulation</h3>
-                    <p>Sévère : {w.granulation_severe ?? "-"} • Légère : {w.granulation_legere ?? "-"}</p>
+                    <p>Sévère : {w.granulationSevere ?? "-"} • Légère : {w.granulationLegere ?? "-"}</p>
                   </div>
                   {photoPreview && (
                     <div className="space-y-1">
                       <h3 className="text-sm font-semibold text-muted-foreground">Photo</h3>
                       <img src={photoPreview} alt="Photo" className="rounded-lg max-h-32 object-cover" />
-                      {w.photo_legende && <p className="text-xs text-muted-foreground">{w.photo_legende}</p>}
+                      {w.photoLegende && <p className="text-xs text-muted-foreground">{w.photoLegende}</p>}
                     </div>
                   )}
                 </div>
@@ -518,10 +506,10 @@ export default function QualiteWizard() {
                   {ratioEA != null && ratioEA < 10 && (
                     <div className="flex items-center gap-2 text-destructive text-sm"><AlertTriangle className="h-4 w-4" /> E/A faible (&lt;10) - Maturité insuffisante</div>
                   )}
-                  {w.brix_degres != null && (w.brix_degres < 8 || w.brix_degres > 16) && (
+                  {w.brixDegres != null && (w.brixDegres < 8 || w.brixDegres > 16) && (
                     <div className="flex items-center gap-2 text-destructive text-sm"><AlertTriangle className="h-4 w-4" /> Brix hors norme (&lt;8 ou &gt;16)</div>
                   )}
-                  {w.granulation_severe === "Oui" && (
+                  {w.granulationSevere === "Oui" && (
                     <div className="flex items-center gap-2 text-warning text-sm"><AlertTriangle className="h-4 w-4" /> Granulation sévère détectée</div>
                   )}
                   {ratioEA != null && ratioEA >= 12 && (
@@ -542,7 +530,7 @@ export default function QualiteWizard() {
                 Suivant <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <Button type="button" onClick={() => onSubmit(isEdit ? (existingData?.statut_validation || "Brouillon") : "Brouillon")} disabled={submitMutation.isPending} className="bg-primary hover:bg-primary/90">
+              <Button type="button" onClick={() => onSubmit(isEdit ? (existingData?.statutValidation || "Brouillon") : "Brouillon")} disabled={submitMutation.isPending} className="bg-primary hover:bg-primary/90">
                 <Save className="h-4 w-4 mr-1" /> {isEdit ? "Enregistrer" : "Enregistrer (Brouillon)"}
               </Button>
             )}

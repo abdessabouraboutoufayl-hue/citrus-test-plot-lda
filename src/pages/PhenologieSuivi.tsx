@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { refApi, phenologieApi } from "@/services/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,10 +19,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Save, Camera, Info, Clock, CalendarDays, CopyCheck } from "lucide-react";
+import { Save, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { format, differenceInDays } from "date-fns";
-import { fr } from "date-fns/locale";
+import { CopyCheck } from "lucide-react";
 
 const STADES = [
   "Repos végétatif", "Débourrement", "Boutons floraux", "Pré-floraison",
@@ -30,129 +29,74 @@ const STADES = [
   "Grossissement", "Véraison", "Début maturité", "Maturité récolte",
 ];
 
-const CYCLE_WINDOW_DAYS = 4;
-const CYCLE_INTERVAL_DAYS = 15;
 const AUTOSAVE_INTERVAL = 30000;
 
 interface DetailEdit {
   stade: string;
   date: string;
   obs: string;
-  photo: boolean;
   checked: boolean;
 }
 
-type EditsMap = Record<number, DetailEdit>; // variete_id -> edit
+type EditsMap = Record<number, DetailEdit>;
 
 export default function PhenologieSuivi() {
-  const { session, userInfo } = useAuth();
+  const { userInfo } = useAuth();
   const queryClient = useQueryClient();
   const isCentral = userInfo.role === "responsable_central";
   const today = new Date().toISOString().split("T")[0];
   const [observationDate, setObservationDate] = useState(today);
-
   const [selectedCampagne, setSelectedCampagne] = useState("");
   const [selectedDomaine, setSelectedDomaine] = useState(userInfo.domaineId?.toString() || "");
   const [edits, setEdits] = useState<EditsMap>({});
 
-  // --- Data queries ---
-  const { data: campagnes } = useQuery({
+  const { data: campagnes = [] } = useQuery({
     queryKey: ["campagnes"],
-    queryFn: async () => {
-      const { data } = await supabase.from("campagnes").select("*").order("date_debut", { ascending: false });
-      return data || [];
-    },
+    queryFn: () => refApi.campagnes(),
   });
 
-  const { data: domaines } = useQuery({
+  const { data: domaines = [] } = useQuery({
     queryKey: ["domaines"],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaines").select("*").order("nom");
-      return data || [];
-    },
+    queryFn: () => refApi.domaines(),
   });
 
-  const { data: varietes } = useQuery({
+  const { data: varietes = [] } = useQuery({
     queryKey: ["varietes-with-types"],
-    queryFn: async () => {
-      const { data } = await supabase.from("varietes").select("*, types_varietes(*)").order("code_variete");
-      return data || [];
-    },
+    queryFn: () => refApi.varietes(),
   });
 
-  const { data: domaineVarietes } = useQuery({
+  const { data: domaineVarietes = [] } = useQuery({
     queryKey: ["domaine-varietes", selectedDomaine],
-    queryFn: async () => {
-      const { data } = await supabase.from("domaine_varietes").select("variete_id").eq("domaine_id", Number(selectedDomaine));
-      return data || [];
-    },
+    queryFn: () => refApi.domaineVarietes(Number(selectedDomaine)),
     enabled: !!selectedDomaine,
   });
 
-  // Last observation for this domaine/campagne (for pre-fill)
-  const { data: lastObservation } = useQuery({
-    queryKey: ["last-observation", selectedCampagne, selectedDomaine],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("observations_phenologie")
-        .select("*, phenologie_details(*)")
-        .eq("campagne_id", Number(selectedCampagne))
-        .eq("domaine_id", Number(selectedDomaine))
-        .order("date_observation", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
+  const { data: rappels = [] } = useQuery({
+    queryKey: ["rappels-pheno"],
+    queryFn: () => phenologieApi.rappels(),
     enabled: !!selectedCampagne && !!selectedDomaine,
   });
 
-  // All details already saved for the current cycle (to detect already-done codes)
-  const { data: cycleObservations } = useQuery({
-    queryKey: ["cycle-observations", selectedCampagne, selectedDomaine],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("observations_phenologie")
-        .select("*, phenologie_details(*)")
-        .eq("campagne_id", Number(selectedCampagne))
-        .eq("domaine_id", Number(selectedDomaine))
-        .order("date_observation", { ascending: false });
-      return data || [];
-    },
-    enabled: !!selectedCampagne && !!selectedDomaine,
-  });
+  const rappel = useMemo(
+    () => rappels.find((r: any) => String(r.campagneId) === selectedCampagne && String(r.domaineId) === selectedDomaine) || null,
+    [rappels, selectedCampagne, selectedDomaine]
+  );
 
-  // Rappel for this domaine/campagne
-  const { data: rappel } = useQuery({
-    queryKey: ["rappel-pheno", selectedCampagne, selectedDomaine],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("rappels_phenologie")
-        .select("*")
-        .eq("campagne_id", Number(selectedCampagne))
-        .eq("domaine_id", Number(selectedDomaine))
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!selectedCampagne && !!selectedDomaine,
-  });
-
-  // Filter varietes for this domaine
   const filteredVarietes = useMemo(() => {
     if (!varietes || !domaineVarietes) return [];
-    const ids = new Set(domaineVarietes.map((dv) => dv.variete_id));
-    return varietes.filter((v) => ids.has(v.id));
+    const ids = new Set(domaineVarietes.map((dv: any) => dv.varieteId));
+    return varietes.filter((v: any) => ids.has(v.id));
   }, [varietes, domaineVarietes]);
 
-  // Group by type
   const typeGroups = useMemo(() => {
-    const groups: Record<string, { typeCode: string; typeNom: string; couleur: string; varietes: typeof filteredVarietes }> = {};
+    const groups: Record<string, { typeCode: string; typeNom: string; couleur: string; varietes: any[] }> = {};
     for (const v of filteredVarietes) {
-      const typeId = v.types_varietes?.id?.toString() || "0";
+      const typeId = v.typeVariete?.id?.toString() || "0";
       if (!groups[typeId]) {
         groups[typeId] = {
-          typeCode: v.types_varietes?.type_code || "?",
-          typeNom: v.types_varietes?.type_nom || "Inconnu",
-          couleur: v.types_varietes?.couleur_badge || "#888",
+          typeCode: v.typeVariete?.typeCode || "?",
+          typeNom: v.typeVariete?.typeNom || "Inconnu",
+          couleur: v.typeVariete?.couleurBadge || "#888",
           varietes: [],
         };
       }
@@ -161,170 +105,61 @@ export default function PhenologieSuivi() {
     return Object.entries(groups).sort(([, a], [, b]) => a.typeCode.localeCompare(b.typeCode));
   }, [filteredVarietes]);
 
-  // Pre-fill from last observation
-  const lastDetailsMap = useMemo(() => {
-    const map: Record<number, { stade: string; obs: string }> = {};
-    if (lastObservation?.phenologie_details) {
-      for (const d of lastObservation.phenologie_details as any[]) {
-        map[d.variete_id] = { stade: d.stade_phenologique, obs: "" };
-      }
-    }
-    return map;
-  }, [lastObservation]);
-
-  // Already-saved variete IDs in the current cycle (from the most recent observation)
-  const alreadySavedMap = useMemo(() => {
-    const map: Record<number, { stade: string; date: string; obs: string }> = {};
-    if (!cycleObservations || cycleObservations.length === 0) return map;
-    // The latest observation is the current cycle reference
-    const latestObs = cycleObservations[0];
-    if (!latestObs) return map;
-    const refDate = latestObs.date_reference_cycle || latestObs.date_observation;
-    // Collect all details from observations sharing the same cycle reference
-    for (const obs of cycleObservations) {
-      const obsRef = obs.date_reference_cycle || obs.date_observation;
-      if (obsRef === refDate) {
-        for (const d of (obs.phenologie_details || []) as any[]) {
-          map[d.variete_id] = {
-            stade: d.stade_phenologique,
-            date: d.date_stade || obs.date_observation,
-            obs: d.observations || "",
-          };
-        }
-      }
-    }
-    // If ALL varietes in domaine are already saved, cycle is complete → return empty for new cycle
-    if (filteredVarietes.length > 0 && filteredVarietes.every(v => map[v.id])) {
-      return {};
-    }
-    return map;
-  }, [cycleObservations, filteredVarietes]);
-
-  const getEdit = (varieteId: number): DetailEdit => {
-    if (edits[varieteId]) return edits[varieteId];
-    const prev = lastDetailsMap[varieteId];
-    return {
-      stade: prev?.stade || "",
-      date: observationDate,
-      obs: "",
-      photo: false,
-      checked: false,
-    };
-  };
+  const getEdit = (varieteId: number): DetailEdit =>
+    edits[varieteId] || { stade: "", date: observationDate, obs: "", checked: false };
 
   const updateEdit = useCallback((varieteId: number, field: keyof DetailEdit, value: any) => {
-    setEdits((prev) => {
-      const current = prev[varieteId] || {
-        stade: lastDetailsMap[varieteId]?.stade || "",
-        date: observationDate,
-        obs: "",
-        photo: false,
-        checked: false,
-      };
+    setEdits(prev => {
+      const current = prev[varieteId] || { stade: "", date: observationDate, obs: "", checked: false };
       return { ...prev, [varieteId]: { ...current, [field]: value } };
     });
-  }, [lastDetailsMap, observationDate]);
+  }, [observationDate]);
 
-  const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: typeof filteredVarietes) => {
-    setEdits((prev) => {
-      const sourceEdit = prev[sourceVarieteId] || {
-        stade: lastDetailsMap[sourceVarieteId]?.stade || "",
-        date: observationDate,
-        obs: "",
-        photo: false,
-        checked: false,
-      };
-      if (!sourceEdit.stade) {
+  const duplicateStadeToType = useCallback((sourceVarieteId: number, typeVarietes: any[]) => {
+    setEdits(prev => {
+      const sourceEdit = prev[sourceVarieteId];
+      if (!sourceEdit?.stade) {
         toast.warning("Sélectionnez d'abord un stade pour ce code");
         return prev;
       }
       const updated = { ...prev };
       for (const v of typeVarietes) {
-        const current = updated[v.id] || {
-          stade: lastDetailsMap[v.id]?.stade || "",
-          date: observationDate,
-          obs: "",
-          photo: false,
-          checked: false,
-        };
+        const current = updated[v.id] || { stade: "", date: observationDate, obs: "", checked: false };
         updated[v.id] = { ...current, stade: sourceEdit.stade, date: observationDate, checked: true };
       }
       toast.success(`Stade "${sourceEdit.stade}" appliqué à ${typeVarietes.length} codes`);
       return updated;
     });
-  }, [lastDetailsMap, observationDate]);
+  }, [observationDate]);
 
-  const checkAllType = useCallback((typeVarietes: typeof filteredVarietes, check: boolean) => {
-    setEdits((prev) => {
+  const checkAllType = useCallback((typeVarietes: any[], check: boolean) => {
+    setEdits(prev => {
       const updated = { ...prev };
       for (const v of typeVarietes) {
-        const current = updated[v.id] || {
-          stade: lastDetailsMap[v.id]?.stade || "",
-          date: observationDate,
-          obs: "",
-          photo: false,
-          checked: false,
-        };
+        const current = updated[v.id] || { stade: "", date: observationDate, obs: "", checked: false };
         updated[v.id] = { ...current, checked: check };
       }
       return updated;
     });
-  }, [lastDetailsMap, observationDate]);
+  }, [observationDate]);
 
-  // Progress stats (include already saved codes)
-  const alreadySavedCount = useMemo(() => {
-    return filteredVarietes.filter(v => alreadySavedMap[v.id]).length;
-  }, [filteredVarietes, alreadySavedMap]);
   const totalCodes = filteredVarietes.length;
-  const newCheckedCodes = Object.entries(edits).filter(([vid, e]) => e.checked && !alreadySavedMap[Number(vid)]).length;
-  const checkedCodes = alreadySavedCount + newCheckedCodes;
+  const checkedCodes = Object.values(edits).filter(e => e.checked).length;
   const progressPct = totalCodes > 0 ? Math.round((checkedCodes / totalCodes) * 100) : 0;
 
   const typesCompleted = useMemo(() => {
     let done = 0;
     for (const [, group] of typeGroups) {
-      const allDone = group.varietes.every((v) => alreadySavedMap[v.id] || edits[v.id]?.checked);
-      if (allDone && group.varietes.length > 0) done++;
+      if (group.varietes.length > 0 && group.varietes.every(v => edits[v.id]?.checked)) done++;
     }
     return done;
-  }, [typeGroups, edits, alreadySavedMap]);
+  }, [typeGroups, edits]);
 
-  // Rappel display
-  const lastObsDate = rappel?.derniere_observation || lastObservation?.date_observation;
-  const nextDueDate = rappel?.prochaine_observation_due;
-  const daysSinceLast = lastObsDate ? differenceInDays(new Date(), new Date(lastObsDate)) : null;
-  const daysUntilNext = nextDueDate ? differenceInDays(new Date(nextDueDate), new Date()) : null;
-
-  // Cycle logic: determine if this is same cycle or new
-  const isNewCycle = useMemo(() => {
-    if (!lastObsDate) return true;
-    const refDate = lastObservation?.date_reference_cycle || lastObsDate;
-    const nextDue = new Date(refDate);
-    nextDue.setDate(nextDue.getDate() + CYCLE_INTERVAL_DAYS);
-    const now = new Date();
-    // If past next due date, it's a new cycle
-    if (now > nextDue) return true;
-    // If all codes are already saved in this cycle, treat as complete → next cycle
-    if (totalCodes > 0 && alreadySavedCount >= totalCodes) return true;
-    return false;
-  }, [lastObsDate, lastObservation, totalCodes, alreadySavedCount]);
-
-  // Auto-set observation date to prochaine_observation_due when starting a new cycle
-  useEffect(() => {
-    if (isNewCycle && rappel?.prochaine_observation_due) {
-      setObservationDate(rappel.prochaine_observation_due);
-    } else {
-      setObservationDate(today);
-    }
-  }, [isNewCycle, rappel, today]);
-
-  // Auto-save to localStorage
+  // Auto-save draft to localStorage
   useEffect(() => {
     const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
     const interval = setInterval(() => {
-      if (Object.keys(edits).length > 0) {
-        localStorage.setItem(key, JSON.stringify(edits));
-      }
+      if (Object.keys(edits).length > 0) localStorage.setItem(key, JSON.stringify(edits));
     }, AUTOSAVE_INTERVAL);
     return () => clearInterval(interval);
   }, [edits, selectedCampagne, selectedDomaine]);
@@ -335,81 +170,45 @@ export default function PhenologieSuivi() {
     const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
     const saved = localStorage.getItem(key);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setEdits(parsed);
-        toast.info("Brouillon restauré depuis la sauvegarde locale");
-      } catch { /* ignore */ }
+      try { setEdits(JSON.parse(saved)); toast.info("Brouillon restauré"); } catch { /* ignore */ }
     } else {
       setEdits({});
     }
   }, [selectedCampagne, selectedDomaine]);
 
-  // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!session?.user?.id) throw new Error("Non connecté");
       if (!selectedCampagne || !selectedDomaine) throw new Error("Sélectionnez campagne et domaine");
+      const checkedEdits = Object.entries(edits).filter(([, e]) => e.checked && e.stade);
+      if (checkedEdits.length === 0) throw new Error("Aucun code coché avec un stade");
 
-      // Only save NEW codes (not already saved in current cycle)
-      const checkedEdits = Object.entries(edits).filter(
-        ([vid, e]) => e.checked && e.stade && !alreadySavedMap[Number(vid)]
-      );
-      if (checkedEdits.length === 0) throw new Error("Aucun nouveau code coché avec un stade");
-
-      // Determine date_reference_cycle
-      const dateRefCycle = isNewCycle ? observationDate : (lastObservation?.date_reference_cycle || observationDate);
-
-      let observationId: number;
-
-      // If continuing the same cycle and last observation exists, add to it
-      if (!isNewCycle && lastObservation?.id) {
-        observationId = lastObservation.id;
-      } else {
-        // Create new observation header
-        const { data: obs, error: obsErr } = await supabase
-          .from("observations_phenologie")
-          .insert({
-            domaine_id: Number(selectedDomaine),
-            campagne_id: Number(selectedCampagne),
-            date_observation: observationDate,
-            user_id: session.user.id,
-            observateur_nom: userInfo.nomComplet || "Inconnu",
-            date_reference_cycle: dateRefCycle,
-          })
-          .select()
-          .single();
-        if (obsErr) throw obsErr;
-        observationId = obs.id;
-      }
-
-      // Insert details
-      const details = checkedEdits.map(([varieteId, edit]) => ({
-        observation_id: observationId,
-        variete_id: Number(varieteId),
-        stade_precedent: lastDetailsMap[Number(varieteId)]?.stade || alreadySavedMap[Number(varieteId)]?.stade || null,
-        stade_phenologique: edit.stade,
-        date_stade: edit.date || today,
-        observations: edit.obs || null,
-        photo_url: null,
-      }));
-
-      const { error: detErr } = await supabase.from("phenologie_details").insert(details);
-      if (detErr) throw detErr;
+      await phenologieApi.addObservation({
+        domaineId: Number(selectedDomaine),
+        campagneId: Number(selectedCampagne),
+        dateObservation: observationDate,
+        observateurNom: userInfo.nomComplet || "Inconnu",
+        details: checkedEdits.map(([varieteId, edit]) => ({
+          varieteId: Number(varieteId),
+          stadePhenologique: edit.stade,
+          dateStade: edit.date || today,
+          observations: edit.obs || null,
+        })),
+      });
     },
     onSuccess: () => {
       const key = `pheno-draft-${selectedCampagne}-${selectedDomaine}`;
       localStorage.removeItem(key);
       setEdits({});
-      queryClient.invalidateQueries({ queryKey: ["last-observation"] });
-      queryClient.invalidateQueries({ queryKey: ["cycle-observations"] });
-      queryClient.invalidateQueries({ queryKey: ["rappel-pheno"] });
-      toast.success(`Observation enregistrée (${newCheckedCodes} codes ajoutés)`);
+      queryClient.invalidateQueries({ queryKey: ["rappels-pheno"] });
+      toast.success(`Observation enregistrée (${checkedCodes} codes)`);
     },
     onError: (e: any) => toast.error(e.message),
   });
 
-  const selectedDomaineObj = domaines?.find((d) => d.id.toString() === selectedDomaine);
+  const selectedDomaineObj = domaines.find((d: any) => d.id.toString() === selectedDomaine);
+
+  const nextDueDate = rappel?.prochaineObservationDue;
+  const lastObsDate = rappel?.derniereObservation;
 
   return (
     <div className="space-y-6">
@@ -420,12 +219,11 @@ export default function PhenologieSuivi() {
         </p>
       </div>
 
-      {/* Filters */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <div>
           <Label className="text-xs mb-1 block">Campagne</Label>
           <SearchableSelect
-            options={(campagnes || []).map((c) => ({ value: c.id.toString(), label: c.code_campagne }))}
+            options={(campagnes || []).map((c: any) => ({ value: c.id.toString(), label: c.codeCampagne }))}
             value={selectedCampagne}
             onValueChange={setSelectedCampagne}
             placeholder="Campagne..."
@@ -435,7 +233,7 @@ export default function PhenologieSuivi() {
           <Label className="text-xs mb-1 block">Ferme</Label>
           {isCentral ? (
             <SearchableSelect
-              options={(domaines || []).map((d) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))}
+              options={(domaines || []).map((d: any) => ({ value: d.id.toString(), label: d.nom, sublabel: d.region }))}
               value={selectedDomaine}
               onValueChange={setSelectedDomaine}
               placeholder="Ferme..."
@@ -450,56 +248,39 @@ export default function PhenologieSuivi() {
 
       {selectedCampagne && selectedDomaine && (
         <>
-          {/* Header stats */}
           <Card>
             <CardContent className="pt-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <Label htmlFor="obs-date" className="text-xs text-muted-foreground">Date d'observation</Label>
+                  <Label className="text-xs text-muted-foreground">Date d'observation</Label>
                   <Input
-                    id="obs-date"
                     type="date"
                     value={observationDate}
-                    onChange={(e) => setObservationDate(e.target.value)}
+                    onChange={e => setObservationDate(e.target.value)}
                     className="h-8 text-sm mt-1"
                   />
                 </div>
-                <div className="flex items-center gap-3">
-                  <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                {lastObsDate && (
                   <div>
                     <p className="text-xs text-muted-foreground">Dernière observation</p>
-                    <p className="text-sm font-medium">
-                      {lastObsDate
-                        ? `${format(new Date(lastObsDate), "dd/MM/yyyy", { locale: fr })} (${daysSinceLast}j)`
-                        : "Aucune"}
-                    </p>
+                    <p className="text-sm font-medium">{lastObsDate}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-muted-foreground" />
+                )}
+                {nextDueDate && (
                   <div>
                     <p className="text-xs text-muted-foreground">Prochaine due</p>
-                    <p className={`text-sm font-medium ${daysUntilNext !== null && daysUntilNext < 0 ? "text-destructive" : ""}`}>
-                      {nextDueDate
-                        ? `${format(new Date(nextDueDate), "dd/MM/yyyy", { locale: fr })} (${daysUntilNext !== null ? (daysUntilNext >= 0 ? `dans ${daysUntilNext}j` : `${Math.abs(daysUntilNext)}j de retard`) : ""})`
-                        : "—"}
-                    </p>
+                    <p className={`text-sm font-medium ${nextDueDate < today ? "text-destructive" : ""}`}>{nextDueDate}</p>
                   </div>
-                </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Progression</p>
                   <Progress value={progressPct} className="h-3" />
                   <p className="text-xs text-muted-foreground mt-1">{checkedCodes}/{totalCodes} codes ({progressPct}%)</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Types complétés</p>
-                  <p className="text-sm font-medium">{typesCompleted}/{typeGroups.length}</p>
-                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Accordion per type */}
           {typeGroups.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground text-sm">
@@ -509,7 +290,7 @@ export default function PhenologieSuivi() {
           ) : (
             <Accordion type="multiple" className="space-y-2">
               {typeGroups.map(([typeId, group]) => {
-                const groupChecked = group.varietes.filter((v) => edits[v.id]?.checked).length;
+                const groupChecked = group.varietes.filter(v => edits[v.id]?.checked).length;
                 return (
                   <AccordionItem key={typeId} value={typeId} className="border rounded-lg bg-card">
                     <AccordionTrigger className="px-4 py-3 hover:no-underline">
@@ -523,21 +304,16 @@ export default function PhenologieSuivi() {
                         <span className="font-medium text-sm">{group.typeNom}</span>
                         <div className="flex items-center gap-2 ml-auto mr-4">
                           <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                            onClick={(e) => {
+                            variant="ghost" size="sm" className="h-6 px-2 text-xs"
+                            onClick={e => {
                               e.stopPropagation();
-                              const remainingVarietes = group.varietes.filter(v => !alreadySavedMap[v.id]);
-                              const allChecked = remainingVarietes.every((v) => edits[v.id]?.checked);
-                              checkAllType(remainingVarietes, !allChecked);
+                              const allChecked = group.varietes.every(v => edits[v.id]?.checked);
+                              checkAllType(group.varietes, !allChecked);
                             }}
                           >
-                            {group.varietes.filter(v => !alreadySavedMap[v.id]).every((v) => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
+                            {group.varietes.every(v => edits[v.id]?.checked) ? "Décocher tout" : "Tout cocher"}
                           </Button>
-                          <span className="text-xs text-muted-foreground">
-                            {groupChecked + group.varietes.filter(v => alreadySavedMap[v.id]).length}/{group.varietes.length} codes
-                          </span>
+                          <span className="text-xs text-muted-foreground">{groupChecked}/{group.varietes.length} codes</span>
                         </div>
                       </div>
                     </AccordionTrigger>
@@ -547,63 +323,38 @@ export default function PhenologieSuivi() {
                           <TableHeader>
                             <TableRow>
                               <TableHead className="w-[80px]">Code</TableHead>
-                              <TableHead className="w-[140px]">Stade actuel</TableHead>
                               <TableHead className="w-[200px]">Nouveau stade</TableHead>
                               <TableHead className="w-[140px]">Date</TableHead>
                               <TableHead className="min-w-[150px]">Obs</TableHead>
-                              <TableHead className="w-[40px]">📸</TableHead>
                               <TableHead className="w-[40px]">✓</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {group.varietes.map((v) => {
-                              const saved = alreadySavedMap[v.id];
-                              if (saved) {
-                                // Already saved in current cycle - show as done
-                                return (
-                                  <TableRow key={v.id} className="bg-primary/10 opacity-70">
-                                    <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{saved.stade}</TableCell>
-                                    <TableCell className="text-sm font-medium text-primary">✅ {saved.stade}</TableCell>
-                                    <TableCell className="text-xs">{saved.date ? format(new Date(saved.date), "dd/MM/yyyy", { locale: fr }) : "—"}</TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{saved.obs || "—"}</TableCell>
-                                    <TableCell>—</TableCell>
-                                    <TableCell>
-                                      <Checkbox checked disabled />
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              }
+                            {group.varietes.map(v => {
                               const edit = getEdit(v.id);
-                              const prevStade = lastDetailsMap[v.id]?.stade || "—";
                               return (
                                 <TableRow key={v.id} className={edit.checked ? "bg-primary/5" : ""}>
-                                  <TableCell className="font-mono text-sm">{v.code_variete}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">{prevStade}</TableCell>
+                                  <TableCell className="font-mono text-sm">{v.codeVariete}</TableCell>
                                   <TableCell>
                                     <div className="flex items-center gap-1">
                                       <Select
                                         value={edit.stade || "none"}
-                                        onValueChange={(val) => updateEdit(v.id, "stade", val === "none" ? "" : val)}
+                                        onValueChange={val => updateEdit(v.id, "stade", val === "none" ? "" : val)}
                                       >
                                         <SelectTrigger className="h-8 text-xs">
                                           <SelectValue placeholder="Stade..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                           <SelectItem value="none">—</SelectItem>
-                                          {STADES.map((s) => (
-                                            <SelectItem key={s} value={s}>{s}</SelectItem>
-                                          ))}
+                                          {STADES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                         </SelectContent>
                                       </Select>
                                       <TooltipProvider>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-7 w-7 shrink-0"
-                                              onClick={() => duplicateStadeToType(v.id, group.varietes.filter(vv => !alreadySavedMap[vv.id]))}
+                                              variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                                              onClick={() => duplicateStadeToType(v.id, group.varietes)}
                                             >
                                               <CopyCheck className="h-3.5 w-3.5 text-muted-foreground" />
                                             </Button>
@@ -617,30 +368,22 @@ export default function PhenologieSuivi() {
                                   </TableCell>
                                   <TableCell>
                                     <Input
-                                      type="date"
-                                      className="h-8 text-xs"
+                                      type="date" className="h-8 text-xs"
                                       value={edit.date}
-                                      onChange={(e) => updateEdit(v.id, "date", e.target.value)}
+                                      onChange={e => updateEdit(v.id, "date", e.target.value)}
                                     />
                                   </TableCell>
                                   <TableCell>
                                     <Input
-                                      className="h-8 text-xs"
-                                      placeholder="Observations..."
+                                      className="h-8 text-xs" placeholder="Observations..."
                                       value={edit.obs}
-                                      onChange={(e) => updateEdit(v.id, "obs", e.target.value)}
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Checkbox
-                                      checked={edit.photo}
-                                      onCheckedChange={(c) => updateEdit(v.id, "photo", !!c)}
+                                      onChange={e => updateEdit(v.id, "obs", e.target.value)}
                                     />
                                   </TableCell>
                                   <TableCell>
                                     <Checkbox
                                       checked={edit.checked}
-                                      onCheckedChange={(c) => updateEdit(v.id, "checked", !!c)}
+                                      onCheckedChange={c => updateEdit(v.id, "checked", !!c)}
                                     />
                                   </TableCell>
                                 </TableRow>
@@ -656,21 +399,14 @@ export default function PhenologieSuivi() {
             </Accordion>
           )}
 
-          {/* Footer save */}
-          <div className="sticky bottom-4 z-10 flex items-center gap-3 flex-wrap">
-            {alreadySavedCount > 0 && (
-              <span className="text-sm text-muted-foreground bg-card px-3 py-2 rounded-md border">
-                ✅ {alreadySavedCount} code{alreadySavedCount > 1 ? "s" : ""} déjà saisi{alreadySavedCount > 1 ? "s" : ""} · {totalCodes - alreadySavedCount} restant{totalCodes - alreadySavedCount > 1 ? "s" : ""}
-              </span>
-            )}
+          <div className="sticky bottom-4 z-10 flex items-center gap-3">
             <Button
-              className="w-full sm:w-auto"
-              size="lg"
+              className="w-full sm:w-auto" size="lg"
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || newCheckedCodes === 0}
+              disabled={saveMutation.isPending || checkedCodes === 0}
             >
               <Save className="h-5 w-5 mr-2" />
-              💾 Enregistrer ({newCheckedCodes} nouveau{newCheckedCodes > 1 ? "x" : ""} code{newCheckedCodes > 1 ? "s" : ""})
+              💾 Enregistrer ({checkedCodes} code{checkedCodes > 1 ? "s" : ""})
             </Button>
           </div>
         </>

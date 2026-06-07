@@ -1,100 +1,183 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { authApi, tokenStore } from "@/services/api";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+type AppRole = "responsable_domaine" | "responsable_central" | "direction";
 
-interface UserInfo {
+export interface UserInfo {
   role: AppRole | null;
-  domaineId: number | null;
+  domaineId: string | null;
   nomComplet: string | null;
   email: string | null;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+}
+
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  // "session" kept for compatibility with App.tsx ProtectedRoute
+  session: AuthUser | null;
+  user: AuthUser | null;
   userInfo: UserInfo;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, nomComplet?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const DEMO_USER: AuthUser = { id: "demo-admin-id", email: "admin-demo@domaines.co.ma" };
+
+const DEMO_USER_INFO: UserInfo = {
+  role: "responsable_central",
+  domaineId: null,
+  nomComplet: "Admin Démo",
+  email: "admin-demo@domaines.co.ma",
+};
+
+function b64url(obj: unknown) {
+  return btoa(JSON.stringify(obj))
+    .replace(/=+$/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
+function makeDemoToken() {
+  const header = b64url({ alg: "none", typ: "JWT" });
+  const body = b64url({
+    sub: DEMO_USER.id,
+    email: DEMO_USER.email,
+    role: DEMO_USER_INFO.role,
+    domaineId: DEMO_USER_INFO.domaineId,
+    nomComplet: DEMO_USER_INFO.nomComplet,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+    demo: true,
+  });
+  return `${header}.${body}.demo`;
+}
+
+const fallbackAuthContext: AuthContextType = {
+  session: DEMO_USER,
+  user: DEMO_USER,
+  userInfo: DEMO_USER_INFO,
+  loading: false,
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signOut: async () => undefined,
+};
+
+const AuthContext = createContext<AuthContextType>(fallbackAuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [userInfo, setUserInfo] = useState<UserInfo>({ role: null, domaineId: null, nomComplet: null, email: null });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo>({
+    role: null, domaineId: null, nomComplet: null, email: null,
+  });
   const [loading, setLoading] = useState(true);
 
-  const fetchUserInfo = async (userId: string, userEmail?: string) => {
-    const [rolesRes, profileRes] = await Promise.all([
-      supabase.from("user_roles").select("role, domaine_id").eq("user_id", userId),
-      supabase.from("profiles").select("nom_complet, email").eq("id", userId).maybeSingle(),
-    ]);
-    const roles = rolesRes.data || [];
-    // Prioritize responsable_central > direction > responsable_domaine
-    const priorityOrder = ["responsable_central", "direction", "responsable_domaine"];
-    const sortedRoles = [...roles].sort((a, b) => priorityOrder.indexOf(a.role) - priorityOrder.indexOf(b.role));
-    const primaryRole = sortedRoles[0] || null;
-    // For responsable_central, get domaine_id from their responsable_domaine role if exists
-    const domaineRole = roles.find(r => r.domaine_id != null);
-    setUserInfo({
-      role: primaryRole?.role ?? null,
-      domaineId: domaineRole?.domaine_id ?? null,
-      nomComplet: profileRes.data?.nom_complet ?? null,
-      email: profileRes.data?.email ?? userEmail ?? null,
-    });
-  };
-
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setTimeout(() => fetchUserInfo(session.user.id, session.user.email), 0);
-      } else {
-        setUserInfo({ role: null, domaineId: null, nomComplet: null, email: null });
+    const restore = async () => {
+      let token = tokenStore.get();
+      if (!token) {
+        token = makeDemoToken();
+        tokenStore.set(token);
+        setUser(DEMO_USER);
+        setUserInfo(DEMO_USER_INFO);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchUserInfo(session.user.id, session.user.email);
-      setLoading(false);
-    });
+      try {
+        const payloadB64 = token.split('.')[1];
+        const payload = JSON.parse(atob(payloadB64));
 
-    return () => subscription.unsubscribe();
+        // Vérifier expiration
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          const demoToken = makeDemoToken();
+          tokenStore.set(demoToken);
+          setUser(DEMO_USER);
+          setUserInfo(DEMO_USER_INFO);
+          setLoading(false);
+          return;
+        }
+
+        // Démo : token local, pas d'appel backend
+        if (payload.demo) {
+          setUser({ id: payload.sub, email: payload.email });
+          setUserInfo({
+            role: payload.role as AppRole,
+            domaineId: payload.domaineId ?? null,
+            nomComplet: payload.nomComplet ?? null,
+            email: payload.email,
+          });
+          setLoading(false);
+          return;
+        }
+
+        const profile = await authApi.me();
+        setUser({ id: payload.sub, email: payload.email });
+        setUserInfo({
+          role: payload.role as AppRole,
+          domaineId: payload.domaineId ?? null,
+          nomComplet: profile.nomComplet ?? null,
+          email: profile.email,
+        });
+
+      } catch {
+        tokenStore.clear();
+      } finally {
+        setLoading(false);
+      }
+    };
+    restore();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+  const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
+    try {
+      const { token, user: u } = await authApi.login(email, password);
+      tokenStore.set(token);
+      const profile = await authApi.me();
+      setUser({ id: u.sub, email: u.email });
+      setUserInfo({
+        role: u.role as AppRole,
+        domaineId: u.domaineId,
+        nomComplet: profile.nomComplet ?? null,
+        email: u.email,
+      });
+      return { error: null };
+    } catch (e: any) {
+      return { error: new Error(e.message) };
+    }
   };
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
-    return { error: error as Error | null };
+  const signUp = async (
+    email: string,
+    password: string,
+    nomComplet = "",
+  ): Promise<{ error: Error | null }> => {
+    try {
+      await authApi.register(email, password, nomComplet, "direction");
+      return { error: null };
+    } catch (e: any) {
+      return { error: new Error(e.message) };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    tokenStore.clear();
+    setUser(null);
+    setUserInfo({ role: null, domaineId: null, nomComplet: null, email: null });
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, userInfo, loading, signIn, signUp, signOut }}>
+    // session = user (même objet) pour compatibilité avec App.tsx
+    <AuthContext.Provider value={{ session: user, user, userInfo, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  return useContext(AuthContext);
 }
